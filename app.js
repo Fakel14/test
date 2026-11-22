@@ -1,0 +1,1459 @@
+/* PIXEL.CRT — Green phosphor pixel art editor */
+const STORAGE_KEY = 'pixelCRT_projects_v2';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+
+let projects = loadProjects();
+let activeProject = null;
+let activeLayerId = null;
+let sortMode = 'new';
+let searchQuery = '';
+
+let state = {
+  tool: 'pencil',
+  brushSize: 1,
+  brushOpacity: 100,
+  colorPrimary: '#00ff41',
+  colorSecondary: '#002200',
+  zoom: 16, // pixel size
+  isDrawing: false,
+  startPos: null,
+  lastPos: null,
+  perfectPixel: false,
+  mirrorX: false,
+  mirrorY: false,
+  exportBg: 'transparent',
+  exportScale: 4,
+  history: [], // global for undo? per layer
+};
+
+// PALETTE
+const defaultPalette = [
+  '#000000','#0a1f0a','#1a4d1a','#2a6b2a','#00ff41','#00cc33','#66ff66','#b8ffb8',
+  '#ffffff','#c0c0c0','#7a7a7a','#3a3a3a','#ff0040','#ffaa00','#00aaff','#aa00ff',
+  '#ffd700','#ff6b00','#ff00ff','#00ffff','#8b4513','#deb887','#4a4a4a','#002200',
+  '#003300','#004400','#005500','#006600','#007700','#008800','#99ff99','#ccffcc',
+];
+let palette = [...defaultPalette];
+
+// DOM refs
+const galleryView = $('#galleryView');
+const editorView = $('#editorView');
+const projectsGrid = $('#projectsGrid');
+const emptyState = $('#emptyState');
+const canvasSizeLabel = $('#canvasSizeLabel');
+const coordsLabel = $('#coordsLabel');
+const zoomLabel = $('#zoomLabel');
+const statusTool = $('#statusTool');
+const statusLayer = $('#statusLayer');
+const statusColor = $('#statusColor');
+const viewport = $('#viewport');
+const canvasStack = $('#canvasStack');
+const mainCanvas = $('#mainCanvas');
+const checkerCanvas = $('#checkerCanvas');
+const overlayCanvas = $('#overlayCanvas');
+const gridOverlay = $('#gridOverlay');
+const layersList = $('#layersList');
+const layersCount = $('#layersCount');
+const paletteGrid = $('#paletteGrid');
+const primarySwatch = $('#primaryColorSwatch');
+const secondarySwatch = $('#secondaryColorSwatch');
+const colorPicker = $('#colorPicker');
+const colorHex = $('#colorHex');
+const brushOpacity = $('#brushOpacity');
+const brushOpacityVal = $('#brushOpacityVal');
+
+// INIT
+init();
+
+function init(){
+  bindEvents();
+  renderPalette();
+  updateColorUI();
+  renderGallery();
+  updateHeaderStats();
+  // auto show gallery
+  showGallery();
+  // checker setup
+  // keyboard
+  window.addEventListener('keydown', onKeyDown);
+}
+
+function bindEvents(){
+  // gallery buttons
+  $('#btnGallery').onclick = showGallery;
+  $('#btnNewProject').onclick = openNewModal;
+  $('#btnEditorBack').onclick = showGallery;
+  $('#btnHeroNew').onclick = openNewModal;
+  $('#btnEmptyNew').onclick = openNewModal;
+
+  // new project modal
+  $('#closeModal').onclick = closeNewModal;
+  $('#cancelModal').onclick = closeNewModal;
+  $('#newProjectModal .modal-backdrop').onclick = closeNewModal;
+  $('#createProjectBtn').onclick = createProject;
+  // size presets
+  $$('.preset-btn').forEach(b=>{
+    b.onclick = ()=>{
+      $$('.preset-btn').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      $('#newW').value = b.dataset.w;
+      $('#newH').value = b.dataset.h;
+      updatePixelCount();
+    };
+  });
+  $('#newW').addEventListener('input', ()=>{ $$('.preset-btn').forEach(x=>x.classList.remove('active')); updatePixelCount();});
+  $('#newH').addEventListener('input', updatePixelCount);
+  $$('[data-bgmodal]').forEach(b=> b.onclick = ()=>{
+    $$('[data-bgmodal]').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+  });
+  $('#searchInput').addEventListener('input', e=>{ searchQuery = e.target.value.toLowerCase(); renderGallery();});
+  $$('[data-sort]').forEach(b=> b.onclick = ()=>{
+    $$('[data-sort]').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    sortMode = b.dataset.sort;
+    renderGallery();
+  });
+
+  // toolbar tools
+  $$('.tool-btn').forEach(btn=>{
+    btn.onclick = ()=>{
+      $$('.tool-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state.tool = btn.dataset.tool;
+      statusTool.textContent = 'ИНСТРУМЕНТ: ' + btn.textContent.trim();
+      updateCursor();
+    };
+  });
+  $$('.brush-btn').forEach(b=>{
+    b.onclick = ()=>{
+      $$('.brush-btn').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      state.brushSize = parseInt(b.dataset.size);
+    };
+  });
+  $('#perfectPixel').onchange = e=> state.perfectPixel = e.target.checked;
+  $('#mirrorX').onchange = e=> state.mirrorX = e.target.checked;
+  $('#mirrorY').onchange = e=> state.mirrorY = e.target.checked;
+
+  $('#btnUndo').onclick = undo;
+  $('#btnRedo').onclick = redo;
+  $('#btnClearLayer').onclick = clearActiveLayer;
+
+  // canvas toolbar
+  $('#btnZoomIn').onclick = ()=> setZoom(state.zoom + 2);
+  $('#btnZoomOut').onclick = ()=> setZoom(state.zoom - 2);
+  $('#btnZoomReset').onclick = ()=> setZoom(16);
+  $('#toggleGrid').onchange = e=> gridOverlay.style.display = e.target.checked ? 'block' : 'none';
+  $('#toggleChecker').onchange = e=> checkerCanvas.style.display = e.target.checked ? 'block' : 'none';
+  $('#toggleOnion').onchange = () => composite();
+
+  // colors
+  colorPicker.oninput = e=>{
+    state.colorPrimary = e.target.value;
+    colorHex.value = e.target.value.toUpperCase();
+    updateColorUI();
+  };
+  colorHex.oninput = e=>{
+    let v = e.target.value;
+    if(/^#[0-9A-Fa-f]{6}$/.test(v)){
+      state.colorPrimary = v;
+      colorPicker.value = v;
+      updateColorUI();
+    }
+  };
+  primarySwatch.onclick = ()=> colorPicker.click();
+  secondarySwatch.onclick = ()=>{
+    // swap?
+    let tmp = state.colorPrimary;
+    state.colorPrimary = state.colorSecondary;
+    state.colorSecondary = tmp;
+    colorPicker.value = state.colorPrimary;
+    colorHex.value = state.colorPrimary.toUpperCase();
+    updateColorUI();
+  };
+  $('#swapColors').onclick = ()=>{
+    let tmp = state.colorPrimary;
+    state.colorPrimary = state.colorSecondary;
+    state.colorSecondary = tmp;
+    colorPicker.value = state.colorPrimary;
+    colorHex.value = state.colorPrimary.toUpperCase();
+    updateColorUI();
+  };
+  brushOpacity.oninput = e=>{
+    state.brushOpacity = parseInt(e.target.value);
+    brushOpacityVal.textContent = state.brushOpacity + '%';
+  };
+  $('#btnAddToPalette').onclick = ()=>{
+    if(!palette.includes(state.colorPrimary)){
+      palette.unshift(state.colorPrimary);
+      if(palette.length>64) palette.pop();
+      renderPalette();
+      toast('ЦВЕТ ДОБАВЛЕН В ПАЛИТРУ');
+    }
+  };
+  $('#btnPickPalette').onclick = ()=>{
+    // cycle some palettes
+    const palettes = [
+      defaultPalette,
+      ['#000000','#1a1a2e','#16213e','#0f3460','#533483','#e94560','#ffffff','#00ff41'],
+      ['#000000','#2b2d42','#8d99ae','#edf2f4','#ef233c','#d90429','#00ff99','#ffbe0b'],
+      ['#0d1b2a','#1b263b','#415a77','#778da9','#e0e1dd','#00ff41','#00cc33','#99ff99'],
+      ['#000000','#3a0ca3','#7209b7','#f72585','#4361ee','#4cc9f0','#ffd166','#00ff41'],
+    ];
+    let idx = Math.floor(Math.random()*palettes.length);
+    palette = [...palettes[idx]];
+    renderPalette();
+    toast('ПАЛИТРА ЗАГРУЖЕНА');
+  };
+
+  // layers
+  $('#btnAddLayer').onclick = addLayer;
+  $('#btnDeleteLayer').onclick = deleteLayer;
+  $('#btnDupLayer').onclick = duplicateLayer;
+  $('#btnMergeDown').onclick = mergeDown;
+  $('#btnMoveUp').onclick = ()=> moveLayer(1);
+  $('#btnMoveDown').onclick = ()=> moveLayer(-1);
+  $('#btnLayerUpPx').onclick = ()=> nudgeLayer(0,-1);
+  $('#btnLayerDownPx').onclick = ()=> nudgeLayer(0,1);
+  $('#btnLayerLeftPx').onclick = ()=> nudgeLayer(-1,0);
+  $('#btnLayerRightPx').onclick = ()=> nudgeLayer(1,0);
+
+  // import
+  $('#importImage').onchange = handleImportFile;
+  $('#closeImportModal').onclick = closeImportModal;
+  $('#cancelImport').onclick = closeImportModal;
+  $('#importModal .modal-backdrop').onclick = closeImportModal;
+  $('#confirmImport').onclick = confirmImport;
+
+  // drag & drop
+  viewport.addEventListener('dragover', e=>{ e.preventDefault(); viewport.style.outline='2px dashed var(--green)';});
+  viewport.addEventListener('dragleave', ()=> viewport.style.outline='');
+  viewport.addEventListener('drop', e=>{
+    e.preventDefault(); viewport.style.outline='';
+    const file = e.dataTransfer.files[0];
+    if(file && file.type.startsWith('image/')) prepareImport(file);
+  });
+
+  // canvas events
+  overlayCanvas.addEventListener('pointerdown', onPointerDown);
+  overlayCanvas.addEventListener('pointermove', onPointerMove);
+  overlayCanvas.addEventListener('pointerup', onPointerUp);
+  overlayCanvas.addEventListener('pointerleave', onPointerLeave);
+  overlayCanvas.addEventListener('contextmenu', e=> e.preventDefault());
+
+  // export
+  $$('.bg-btn').forEach(b=>{
+    if(b.dataset.bg){
+      b.onclick = ()=>{
+        $$('[data-bg]').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        state.exportBg = b.dataset.bg;
+        if(state.exportBg!=='transparent') $('#exportBgColor').value = state.exportBg;
+      };
+    }
+  });
+  $('#exportBgColor').oninput = e=>{
+    state.exportBg = e.target.value;
+    $$('[data-bg]').forEach(x=>x.classList.remove('active'));
+  };
+  $('#exportScale').onchange = e=> state.exportScale = parseInt(e.target.value);
+  $('#btnExportPng').onclick = ()=> exportPNG(false);
+  $('#btnExportPngBg').onclick = ()=> exportPNG(true);
+  $('#btnCopyPng').onclick = copyPNG;
+  $('#btnSaveProject').onclick = saveProjects;
+
+  // resize
+  $('#btnResizeCanvas').onclick = resizeCanvasFromInputs;
+  // wheel zoom
+  viewport.addEventListener('wheel', e=>{
+    if(e.ctrlKey || e.metaKey){
+      e.preventDefault();
+      setZoom(state.zoom + (e.deltaY>0?-2:2));
+    }
+  }, {passive:false});
+
+  // import modal preview etc.
+}
+
+function updatePixelCount(){
+  const w = parseInt($('#newW').value)||0;
+  const h = parseInt($('#newH').value)||0;
+  $('#pixelCount').textContent = w*h;
+  let hint = '';
+  if(w*h <=256) hint='иконка / курсор';
+  else if(w*h <=1024) hint='оптимально для спрайтов';
+  else if(w*h <=4096) hint='детальный арт';
+  else if(w*h <=16384) hint='постер / сцена';
+  else hint='огромная матрица — тяжело для браузера';
+  $('#sizeHint').textContent = hint;
+}
+
+// PROJECTS
+function loadProjects(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr)?arr:[];
+  }catch{ return [];}
+}
+function saveProjects(){
+  // serialize activeProject layers to dataURL before save
+  if(activeProject){
+    // update layers canvases to data URLs in projects array
+    const idx = projects.findIndex(p=>p.id===activeProject.id);
+    if(idx>=0){
+      projects[idx] = serializeProject(activeProject);
+      // keep activeProject reference synced
+      activeProject = deserializeProject(projects[idx]); // keep canvases alive? Actually need to keep canvases
+      // but we just updated, we need to reassign canvases from activeProject to serialized then back?
+      // Instead keep activeProject canvases and just update projects[idx] data
+    }
+  }
+  // serialize all projects that may still have canvas objects
+  const toSave = projects.map(p=>{
+    if(p.layers && p.layers[0] && p.layers[0].canvas) return serializeProject(p);
+    return p;
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  toast('ПРОЕКТ СОХРАНЁН В ПАМЯТЬ');
+  renderGallery();
+}
+function serializeProject(proj){
+  return {
+    id: proj.id,
+    name: proj.name,
+    width: proj.width,
+    height: proj.height,
+    bg: proj.bg,
+    createdAt: proj.createdAt,
+    updatedAt: Date.now(),
+    layers: proj.layers.map(l=>({
+      id:l.id, name:l.name, visible:l.visible, opacity:l.opacity, offsetX:l.offsetX||0, offsetY:l.offsetY||0,
+      dataURL: l.canvas ? l.canvas.toDataURL() : l.dataURL
+    }))
+  };
+}
+function deserializeProject(raw){
+  const proj = {
+    id: raw.id, name: raw.name, width: raw.width, height: raw.height, bg: raw.bg,
+    createdAt: raw.createdAt, updatedAt: raw.updatedAt,
+    layers: []
+  };
+  raw.layers.forEach(ld=>{
+    const c = document.createElement('canvas');
+    c.width = proj.width; c.height = proj.height;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    if(ld.dataURL){
+      const img = new Image();
+      img.src = ld.dataURL;
+      // sync draw if already loaded? Need to handle async, but for our use we can draw after load
+      // Create promise-like: we will load synchronously via image decode
+      // For now if image not loaded, ctx will be empty but we try to draw after load
+      img.onload = ()=> { ctx.clearRect(0,0,c.width,c.height); ctx.drawImage(img,0,0); if(activeProject && activeProject.id===proj.id) composite(); renderLayers();};
+      // also try immediate if cached
+      if(img.complete) { ctx.drawImage(img,0,0); }
+    }
+    proj.layers.push({
+      id: ld.id, name: ld.name, visible: ld.visible, opacity: ld.opacity, offsetX: ld.offsetX||0, offsetY: ld.offsetY||0,
+      canvas: c, ctx: ctx, history: [], historyIndex: -1
+    });
+  });
+  return proj;
+}
+
+function uid(){ return Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
+
+function openNewModal(){
+  $('#newProjectModal').style.display='grid';
+  $('#newProjectName').value = 'PIXEL_' + String(projects.length+1).padStart(2,'0');
+  updatePixelCount();
+  setTimeout(()=> $('#newProjectName').focus(), 50);
+}
+function closeNewModal(){ $('#newProjectModal').style.display='none'; }
+function createProject(){
+  const name = $('#newProjectName').value.trim() || 'Безымянный';
+  const w = Math.max(1, Math.min(512, parseInt($('#newW').value)||32));
+  const h = Math.max(1, Math.min(512, parseInt($('#newH').value)||32));
+  let bg = 'transparent';
+  const activeBg = document.querySelector('[data-bgmodal].active');
+  if(activeBg) bg = activeBg.dataset.bgmodal;
+  const customBg = $('#newBgColor').value;
+  if(bg==='transparent' && customBg) {} // keep transparent
+
+  const proj = {
+    id: uid(),
+    name, width:w, height:h, bg: bg,
+    createdAt: Date.now(), updatedAt: Date.now(),
+    layers: []
+  };
+  // create first layer
+  const layerCanvas = document.createElement('canvas');
+  layerCanvas.width = w; layerCanvas.height = h;
+  const ctx = layerCanvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  // if bg not transparent, fill layer 0 with bg? Actually background handled as export bg, but we can create bg layer
+  // For transparent, leave empty
+  // For solid bg choice, fill first layer with that color
+  if(bg!=='transparent'){
+    ctx.fillStyle = bg;
+    ctx.fillRect(0,0,w,h);
+  }
+  const layer = {
+    id: uid(), name: 'Слой 1', visible:true, opacity:100, offsetX:0, offsetY:0,
+    canvas: layerCanvas, ctx, history:[], historyIndex:-1
+  };
+  // push initial history
+  pushHistory(layer);
+  proj.layers.push(layer);
+
+  projects.unshift(proj);
+  saveProjectsImmediate();
+  closeNewModal();
+  openProject(proj.id);
+  toast(`МАТРИЦА ${w}×${h} СОЗДАНА`);
+}
+function saveProjectsImmediate(){
+  const toSave = projects.map(p=>{
+    if(p.layers && p.layers[0] && p.layers[0].canvas) return serializeProject(p);
+    return p;
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  renderGallery();
+}
+
+function renderGallery(){
+  let list = [...projects];
+  if(searchQuery) list = list.filter(p=> p.name.toLowerCase().includes(searchQuery));
+  if(sortMode==='new') list.sort((a,b)=> b.createdAt - a.createdAt);
+  else if(sortMode==='old') list.sort((a,b)=> a.createdAt - b.createdAt);
+  else if(sortMode==='name') list.sort((a,b)=> a.name.localeCompare(b.name));
+
+  projectsGrid.innerHTML = '';
+  if(list.length===0){
+    emptyState.style.display='block';
+    projectsGrid.style.display='none';
+  } else {
+    emptyState.style.display='none';
+    projectsGrid.style.display='grid';
+    list.forEach(proj=>{
+      const card = document.createElement('div');
+      card.className='project-card';
+      card.innerHTML = `
+        <div class="card-preview"><canvas width="${proj.width}" height="${proj.height}"></canvas></div>
+        <div class="card-meta">
+          <div>
+            <div class="card-title">${escapeHtml(proj.name)}</div>
+            <div class="card-sub">${proj.width} × ${proj.height} • ${proj.layers.length} слоёв • ${new Date(proj.createdAt).toLocaleDateString()}</div>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-primary btn-small open-btn">ОТКРЫТЬ</button>
+          <button class="btn btn-small dup-btn">⧉</button>
+          <button class="btn btn-small del-btn" style="color:var(--danger)">×</button>
+        </div>
+      `;
+      const cv = card.querySelector('canvas');
+      const ctx = cv.getContext('2d');
+      ctx.imageSmoothingEnabled=false;
+      // if layers have dataURL, draw composite thumbnail
+      // proj may be serialized with dataURL, not canvas
+      // we need to render thumbnail async
+      renderThumbnail(proj, cv);
+
+      card.querySelector('.open-btn').onclick = (e)=>{ e.stopPropagation(); openProject(proj.id); };
+      card.querySelector('.dup-btn').onclick = (e)=>{ e.stopPropagation(); duplicateProject(proj.id); };
+      card.querySelector('.del-btn').onclick = (e)=>{ e.stopPropagation(); deleteProject(proj.id); };
+      card.onclick = ()=> openProject(proj.id);
+      projectsGrid.appendChild(card);
+    });
+  }
+  updateHeaderStats();
+}
+function renderThumbnail(proj, canvas){
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width, canvas.height);
+  // draw checker
+  drawChecker(ctx, canvas.width, canvas.height, 4);
+  // draw each layer
+  let loaded = 0;
+  const layers = proj.layers;
+  if(!layers || layers.length===0) return;
+  layers.forEach(ld=>{
+    const img = new Image();
+    img.onload = ()=>{
+      ctx.globalAlpha = (ld.opacity??100)/100;
+      if(ld.visible!==false) ctx.drawImage(img, ld.offsetX||0, ld.offsetY||0);
+      ctx.globalAlpha=1;
+      loaded++;
+    };
+    img.src = ld.dataURL || (ld.canvas? ld.canvas.toDataURL() : '');
+  });
+}
+function drawChecker(ctx, w,h, size){
+  ctx.fillStyle='#0a0a0a';
+  ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='#141414';
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++) if((x+y)%2===0){
+    // use size
+  }
+  // proper checker at pixel level
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      if((x+y)%2===0){
+        ctx.fillStyle='rgba(255,255,255,0.06)';
+        ctx.fillRect(x,y,1,1);
+      }
+    }
+  }
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function updateHeaderStats(){
+  $('#headerStats').innerHTML = `<span class="blink">●</span> ПРОЕКТОВ: ${projects.length} • ПАМЯТЬ: ${Math.round(JSON.stringify(projects).length/1024)} KB`;
+}
+
+function duplicateProject(id){
+  const orig = projects.find(p=>p.id===id);
+  if(!orig) return;
+  const raw = serializeProject(orig.layers? orig : deserializeProject(orig));
+  // need to handle both serialized and live
+  let des;
+  if(orig.layers && orig.layers[0] && orig.layers[0].canvas){
+    // live
+    des = serializeProject(orig);
+  } else des = orig;
+  const copy = JSON.parse(JSON.stringify(des));
+  copy.id = uid();
+  copy.name = orig.name + ' копия';
+  copy.createdAt = Date.now();
+  copy.layers.forEach(l=> l.id = uid());
+  projects.unshift(copy);
+  saveProjectsImmediate();
+  toast('ПРОЕКТ ДУБЛИРОВАН');
+}
+function deleteProject(id){
+  if(!confirm('Удалить проект? Действие необратимо.')) return;
+  projects = projects.filter(p=>p.id!==id);
+  if(activeProject && activeProject.id===id) showGallery();
+  saveProjectsImmediate();
+  toast('ПРОЕКТ УДАЛЁН');
+}
+
+function showGallery(){
+  galleryView.style.display='block';
+  editorView.style.display='none';
+  $('#btnGallery').style.display='none';
+  $('#btnNewProject').style.display='inline-block';
+  $('#btnEditorBack').style.display='none';
+  renderGallery();
+}
+function openProject(id){
+  const raw = projects.find(p=>p.id===id);
+  if(!raw) return;
+  let proj;
+  if(raw.layers && raw.layers[0] && raw.layers[0].canvas){
+    proj = raw;
+  } else {
+    proj = deserializeProject(raw);
+    // replace in array with live version
+    const idx = projects.findIndex(p=>p.id===id);
+    projects[idx] = proj;
+  }
+  activeProject = proj;
+  activeLayerId = proj.layers[proj.layers.length-1]?.id || null;
+  galleryView.style.display='none';
+  editorView.style.display='block';
+  $('#btnGallery').style.display='inline-block';
+  $('#btnNewProject').style.display='none';
+  $('#btnEditorBack').style.display='inline-block';
+  // update canvas inputs
+  $('#canvasW').value = proj.width;
+  $('#canvasH').value = proj.height;
+  canvasSizeLabel.textContent = `${proj.width} × ${proj.height}`;
+  // ensure each layer has history
+  proj.layers.forEach(l=>{
+    if(!l.history) l.history=[];
+    if(l.history.length===0) pushHistory(l);
+  });
+  setupCanvases();
+  renderLayers();
+  composite();
+  setZoom( Math.max(4, Math.min(32, Math.floor(400 / Math.max(proj.width, proj.height)) * 4 )) );
+  toast(`ОТКРЫТ: ${proj.name} — ${proj.width}×${proj.height}`);
+}
+
+// CANVAS SETUP
+function setupCanvases(){
+  const w = activeProject.width, h = activeProject.height;
+  [mainCanvas, checkerCanvas, overlayCanvas].forEach(c=>{
+    c.width = w; c.height = h;
+    c.style.width = (w * state.zoom) + 'px';
+    c.style.height = (h * state.zoom) + 'px';
+  });
+  canvasStack.style.width = (w * state.zoom) + 'px';
+  canvasStack.style.height = (h * state.zoom) + 'px';
+  // checker
+  const cctx = checkerCanvas.getContext('2d');
+  cctx.imageSmoothingEnabled=false;
+  drawCheckerFull(cctx,w,h);
+  // main
+  const mctx = mainCanvas.getContext('2d');
+  mctx.imageSmoothingEnabled=false;
+  // overlay
+  const octx = overlayCanvas.getContext('2d');
+  octx.imageSmoothingEnabled=false;
+  // grid
+  updateGrid();
+}
+function drawCheckerFull(ctx,w,h){
+  const size = 1;
+  // dark bg
+  ctx.fillStyle='#050505';
+  ctx.fillRect(0,0,w,h);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      if((x+y)%2===0){
+        ctx.fillStyle='#0f0f0f';
+        ctx.fillRect(x,y,1,1);
+      } else {
+        ctx.fillStyle='#0a0a0a';
+        ctx.fillRect(x,y,1,1);
+      }
+    }
+  }
+}
+function updateGrid(){
+  gridOverlay.innerHTML='';
+  if(!activeProject) return;
+  const w = activeProject.width, h = activeProject.height, z = state.zoom;
+  gridOverlay.style.width = (w*z)+'px';
+  gridOverlay.style.height = (h*z)+'px';
+  // create grid lines via CSS using box-shadow or canvas? Use div with background
+  gridOverlay.style.backgroundImage = `
+    linear-gradient(to right, rgba(0,255,65,0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0,255,65,0.12) 1px, transparent 1px)
+  `;
+  gridOverlay.style.backgroundSize = `${z}px ${z}px`;
+}
+function setZoom(z){
+  state.zoom = Math.max(2, Math.min(48, z));
+  zoomLabel.textContent = (state.zoom*100/8).toFixed(0)+'%'; // 8px = 100%? Let's just show zoom
+  // Actually show like 200%, let's compute: base 1px = 6.25% ? Simpler show pixel size
+  zoomLabel.textContent = state.zoom + '×';
+  if(!activeProject) return;
+  [mainCanvas, checkerCanvas, overlayCanvas].forEach(c=>{
+    c.style.width = (activeProject.width * state.zoom) + 'px';
+    c.style.height = (activeProject.height * state.zoom) + 'px';
+  });
+  canvasStack.style.width = (activeProject.width * state.zoom) + 'px';
+  canvasStack.style.height = (activeProject.height * state.zoom) + 'px';
+  gridOverlay.style.width = (activeProject.width * state.zoom) + 'px';
+  gridOverlay.style.height = (activeProject.height * state.zoom) + 'px';
+  updateGrid();
+}
+function updateCursor(){
+  const map = {
+    pencil:'crosshair', eraser:'cell', fill:'pointer', picker:'copy', line:'crosshair', rect:'crosshair', circle:'crosshair', move:'move'
+  };
+  overlayCanvas.style.cursor = map[state.tool] || 'crosshair';
+}
+
+// LAYERS UI
+function renderLayers(){
+  if(!activeProject) return;
+  layersList.innerHTML='';
+  // render top to bottom (reverse)
+  const reversed = [...activeProject.layers].slice().reverse();
+  reversed.forEach((layer, idx)=>{
+    const actualIndex = activeProject.layers.length -1 - idx;
+    const div = document.createElement('div');
+    div.className='layer-item' + (layer.id===activeLayerId ? ' active':'');
+    div.draggable = true;
+    div.dataset.id = layer.id;
+    div.innerHTML = `
+      <div class="layer-thumb"><canvas width="${activeProject.width}" height="${activeProject.height}"></canvas></div>
+      <div class="layer-meta">
+        <div class="layer-name">${escapeHtml(layer.name)}</div>
+        <div class="layer-sub">${layer.offsetX||0},${layer.offsetY||0} • ${layer.opacity}%</div>
+      </div>
+      <div class="layer-controls-row">
+        <button class="icon-mini vis-btn ${layer.visible?'active':''}" title="Видимость">${layer.visible?'◉':'◎'}</button>
+        <button class="icon-mini lock-btn" title="Прозрачность">◐</button>
+      </div>
+    `;
+    // thumb draw
+    const tcanvas = div.querySelector('canvas');
+    const tctx = tcanvas.getContext('2d');
+    tctx.imageSmoothingEnabled=false;
+    // draw checker + layer
+    drawCheckerFull(tctx, activeProject.width, activeProject.height);
+    tctx.drawImage(layer.canvas, layer.offsetX||0, layer.offsetY||0);
+
+    // events
+    div.onclick = (e)=>{
+      if(e.target.closest('.vis-btn')) return;
+      setActiveLayer(layer.id);
+    };
+    div.ondblclick = ()=>{
+      const nameEl = div.querySelector('.layer-name');
+      const inp = document.createElement('input');
+      inp.value = layer.name;
+      nameEl.innerHTML='';
+      nameEl.appendChild(inp);
+      inp.focus();
+      inp.onblur = ()=>{
+        layer.name = inp.value.trim()||layer.name;
+        renderLayers();
+        saveProjectsImmediate();
+      };
+      inp.onkeydown = e=>{ if(e.key==='Enter') inp.blur(); };
+    };
+    // visibility
+    div.querySelector('.vis-btn').onclick = (e)=>{
+      e.stopPropagation();
+      layer.visible = !layer.visible;
+      renderLayers(); composite();
+      saveProjectsImmediate();
+    };
+    // opacity quick
+    div.querySelector('.lock-btn').onclick = (e)=>{
+      e.stopPropagation();
+      const v = prompt('Прозрачность слоя 0-100', layer.opacity);
+      if(v!==null){
+        let n = Math.max(0, Math.min(100, parseInt(v)||0));
+        layer.opacity = n;
+        renderLayers(); composite();
+        saveProjectsImmediate();
+      }
+    };
+
+    // drag reorder
+    div.addEventListener('dragstart', e=>{
+      e.dataTransfer.effectAllowed='move';
+      div.classList.add('dragging');
+      e.dataTransfer.setData('text/plain', layer.id);
+    });
+    div.addEventListener('dragend', ()=> div.classList.remove('dragging'));
+    div.addEventListener('dragover', e=>{
+      e.preventDefault();
+      div.style.outline='1px solid var(--green)';
+    });
+    div.addEventListener('dragleave', ()=> div.style.outline='');
+    div.addEventListener('drop', e=>{
+      e.preventDefault(); div.style.outline='';
+      const draggedId = e.dataTransfer.getData('text/plain');
+      if(draggedId===layer.id) return;
+      const fromIdx = activeProject.layers.findIndex(l=>l.id===draggedId);
+      const toIdx = activeProject.layers.findIndex(l=>l.id===layer.id);
+      if(fromIdx<0||toIdx<0) return;
+      const [dragged] = activeProject.layers.splice(fromIdx,1);
+      activeProject.layers.splice(toIdx,0,dragged);
+      renderLayers(); composite(); saveProjectsImmediate();
+    });
+
+    // opacity slider on hover? Add small range
+    const opacityRow = document.createElement('div');
+    opacityRow.style.cssText='grid-column:1 / -1; display:flex; gap:6px; align-items:center; margin-top:2px';
+    opacityRow.innerHTML = `<input type="range" min="0" max="100" value="${layer.opacity}" style="flex:1; accent-color:var(--green); height:4px"><span style="font-size:9px; color:var(--text-dim)">${layer.opacity}%</span>`;
+    const range = opacityRow.querySelector('input');
+    range.oninput = e=>{
+      layer.opacity = parseInt(e.target.value);
+      opacityRow.querySelector('span').textContent = layer.opacity+'%';
+      div.querySelector('.layer-sub').textContent = `${layer.offsetX||0},${layer.offsetY||0} • ${layer.opacity}%`;
+      composite();
+    };
+    range.onchange = ()=> saveProjectsImmediate();
+    div.appendChild(opacityRow);
+
+    // active styling
+    layersList.appendChild(div);
+  });
+  layersCount.textContent = activeProject.layers.length;
+  statusLayer.textContent = `СЛОЙ: ${activeProject.layers.findIndex(l=>l.id===activeLayerId)+1} / ${activeProject.layers.length}`;
+}
+function setActiveLayer(id){
+  activeLayerId = id;
+  renderLayers();
+  const layer = activeProject.layers.find(l=>l.id===id);
+  if(layer) statusLayer.textContent = `СЛОЙ: ${activeProject.layers.indexOf(layer)+1} — ${layer.name}`;
+}
+function getActiveLayer(){
+  return activeProject?.layers.find(l=>l.id===activeLayerId);
+}
+function addLayer(){
+  if(!activeProject) return;
+  const c = document.createElement('canvas');
+  c.width = activeProject.width; c.height = activeProject.height;
+  const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled=false;
+  const layer = { id:uid(), name:`Слой ${activeProject.layers.length+1}`, visible:true, opacity:100, offsetX:0, offsetY:0, canvas:c, ctx, history:[], historyIndex:-1 };
+  pushHistory(layer);
+  activeProject.layers.push(layer);
+  activeLayerId = layer.id;
+  renderLayers(); composite(); saveProjectsImmediate();
+  toast('СЛОЙ СОЗДАН');
+}
+function deleteLayer(){
+  if(!activeProject) return;
+  if(activeProject.layers.length<=1){ toast('НЕЛЬЗЯ УДАЛИТЬ ПОСЛЕДНИЙ СЛОЙ'); return; }
+  const idx = activeProject.layers.findIndex(l=>l.id===activeLayerId);
+  if(idx<0) return;
+  if(!confirm(`Удалить "${activeProject.layers[idx].name}"?`)) return;
+  activeProject.layers.splice(idx,1);
+  activeLayerId = activeProject.layers[Math.max(0, idx-1)].id;
+  renderLayers(); composite(); saveProjectsImmediate();
+  toast('СЛОЙ УДАЛЁН');
+}
+function duplicateLayer(){
+  const layer = getActiveLayer();
+  if(!layer) return;
+  const c = document.createElement('canvas');
+  c.width = activeProject.width; c.height = activeProject.height;
+  const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(layer.canvas,0,0);
+  const nl = { id:uid(), name: layer.name+' копия', visible:true, opacity:layer.opacity, offsetX:layer.offsetX, offsetY:layer.offsetY, canvas:c, ctx, history:[], historyIndex:-1 };
+  pushHistory(nl);
+  const idx = activeProject.layers.indexOf(layer);
+  activeProject.layers.splice(idx+1,0,nl);
+  activeLayerId = nl.id;
+  renderLayers(); composite(); saveProjectsImmediate();
+  toast('СЛОЙ ДУБЛИРОВАН');
+}
+function mergeDown(){
+  const idx = activeProject.layers.findIndex(l=>l.id===activeLayerId);
+  if(idx<=0){ toast('НИЖЕ НЕТ СЛОЯ ДЛЯ СЛИЯНИЯ'); return; }
+  const top = activeProject.layers[idx];
+  const bottom = activeProject.layers[idx-1];
+  pushHistory(bottom);
+  bottom.ctx.globalAlpha = (top.opacity/100);
+  bottom.ctx.drawImage(top.canvas, top.offsetX||0, top.offsetY||0);
+  bottom.ctx.globalAlpha=1;
+  // remove top
+  activeProject.layers.splice(idx,1);
+  activeLayerId = bottom.id;
+  renderLayers(); composite(); saveProjectsImmediate();
+  toast('СЛОИ ОБЪЕДИНЕНЫ');
+}
+function moveLayer(dir){
+  const idx = activeProject.layers.findIndex(l=>l.id===activeLayerId);
+  if(idx<0) return;
+  const newIdx = idx + dir;
+  if(newIdx<0 || newIdx>=activeProject.layers.length) return;
+  const tmp = activeProject.layers[idx];
+  activeProject.layers[idx]=activeProject.layers[newIdx];
+  activeProject.layers[newIdx]=tmp;
+  renderLayers(); composite(); saveProjectsImmediate();
+}
+function nudgeLayer(dx,dy){
+  const layer = getActiveLayer();
+  if(!layer) return;
+  layer.offsetX = (layer.offsetX||0)+dx;
+  layer.offsetY = (layer.offsetY||0)+dy;
+  composite(); renderLayers(); saveProjectsImmediate();
+}
+
+// HISTORY
+function pushHistory(layer){
+  // save imageData as dataURL to keep small
+  const data = layer.canvas.toDataURL();
+  // trim future
+  if(layer.historyIndex < layer.history.length-1) layer.history = layer.history.slice(0, layer.historyIndex+1);
+  layer.history.push(data);
+  layer.historyIndex = layer.history.length-1;
+  if(layer.history.length>30) { layer.history.shift(); layer.historyIndex--; }
+}
+function undo(){
+  const layer = getActiveLayer();
+  if(!layer || layer.historyIndex<=0){ toast('НЕЧЕГО ОТМЕНЯТЬ'); return; }
+  layer.historyIndex--;
+  restoreHistory(layer);
+}
+function redo(){
+  const layer = getActiveLayer();
+  if(!layer || layer.historyIndex>=layer.history.length-1){ toast('НЕЧЕГО ПОВТОРЯТЬ'); return; }
+  layer.historyIndex++;
+  restoreHistory(layer);
+}
+function restoreHistory(layer){
+  const dataURL = layer.history[layer.historyIndex];
+  const img = new Image();
+  img.onload = ()=>{
+    layer.ctx.clearRect(0,0,layer.canvas.width, layer.canvas.height);
+    layer.ctx.drawImage(img,0,0);
+    composite(); renderLayers();
+  };
+  img.src = dataURL;
+}
+function clearActiveLayer(){
+  const layer = getActiveLayer();
+  if(!layer) return;
+  if(!confirm('Очистить слой?')) return;
+  pushHistory(layer);
+  layer.ctx.clearRect(0,0,layer.canvas.width, layer.canvas.height);
+  composite(); renderLayers(); saveProjectsImmediate();
+}
+
+// PALETTE
+function renderPalette(){
+  paletteGrid.innerHTML='';
+  palette.forEach(col=>{
+    const cell = document.createElement('div');
+    cell.className='palette-cell';
+    cell.style.background = col;
+    if(col.toLowerCase()===state.colorPrimary.toLowerCase()) cell.classList.add('active');
+    cell.title = col;
+    cell.onclick = ()=>{
+      state.colorPrimary = col;
+      colorPicker.value = col;
+      colorHex.value = col.toUpperCase();
+      updateColorUI();
+      renderPalette();
+    };
+    cell.oncontextmenu = e=>{
+      e.preventDefault();
+      state.colorSecondary = col;
+      updateColorUI();
+    };
+    paletteGrid.appendChild(cell);
+  });
+}
+function updateColorUI(){
+  primarySwatch.style.background = state.colorPrimary;
+  secondarySwatch.style.background = state.colorSecondary;
+  statusColor.textContent = `ЦВЕТ: ${state.colorPrimary.toUpperCase()}`;
+  colorPicker.value = state.colorPrimary;
+  colorHex.value = state.colorPrimary.toUpperCase();
+}
+
+// DRAWING
+function getPos(e){
+  const rect = overlayCanvas.getBoundingClientRect();
+  const scaleX = overlayCanvas.width / rect.width;
+  const scaleY = overlayCanvas.height / rect.height;
+  const x = Math.floor((e.clientX - rect.left) * scaleX);
+  const y = Math.floor((e.clientY - rect.top) * scaleY);
+  return {x,y};
+}
+function onPointerDown(e){
+  if(!activeProject) return;
+  overlayCanvas.setPointerCapture(e.pointerId);
+  state.isDrawing = true;
+  const pos = getPos(e);
+  state.startPos = {...pos};
+  state.lastPos = {...pos};
+
+  const layer = getActiveLayer();
+  if(!layer) return;
+
+  if(state.tool==='picker'){
+    pickColor(pos);
+    state.isDrawing=false;
+    return;
+  }
+  if(state.tool==='fill'){
+    pushHistory(layer);
+    floodFill(layer, pos.x, pos.y, state.colorPrimary);
+    composite(); renderLayers(); saveProjectsImmediate();
+    state.isDrawing=false;
+    return;
+  }
+  if(state.tool==='move'){
+    // start drag offset
+    state.moveStart = {x:pos.x, y:pos.y, ox:layer.offsetX||0, oy:layer.offsetY||0};
+    return;
+  }
+  // for pencil/eraser/line/rect/circle push history
+  pushHistory(layer);
+  if(state.tool==='pencil' || state.tool==='eraser'){
+    drawBrush(layer, pos, pos);
+  }
+  // for shape tools, will draw preview on overlay
+  e.preventDefault();
+}
+function onPointerMove(e){
+  if(!activeProject) return;
+  const pos = getPos(e);
+  coordsLabel.textContent = `X: ${pos.x} Y: ${pos.y}`;
+  const layer = getActiveLayer();
+  if(!layer) return;
+
+  if(state.tool==='move' && state.isDrawing){
+    const dx = pos.x - state.moveStart.x;
+    const dy = pos.y - state.moveStart.y;
+    layer.offsetX = state.moveStart.ox + dx;
+    layer.offsetY = state.moveStart.oy + dy;
+    composite(); renderLayers();
+    return;
+  }
+
+  if(!state.isDrawing) {
+    // preview cursor?
+    if(state.tool==='pencil' || state.tool==='eraser'){
+      // show brush preview on overlay
+      drawOverlayPreview(pos);
+    }
+    return;
+  }
+
+  if(state.tool==='pencil' || state.tool==='eraser'){
+    drawBrush(layer, state.lastPos, pos);
+    state.lastPos = {...pos};
+  } else if(['line','rect','circle'].includes(state.tool)){
+    drawOverlayPreviewShape(state.startPos, pos);
+  }
+}
+function onPointerUp(e){
+  if(!state.isDrawing) return;
+  state.isDrawing=false;
+  const pos = getPos(e);
+  const layer = getActiveLayer();
+  if(!layer) return;
+
+  if(['line','rect','circle'].includes(state.tool)){
+    // commit shape
+    clearOverlay();
+    drawShape(layer, state.startPos, pos, state.tool);
+    composite(); renderLayers(); saveProjectsImmediate();
+  } else if(state.tool==='pencil' || state.tool==='eraser'){
+    composite(); renderLayers(); saveProjectsImmediate();
+  } else if(state.tool==='move'){
+    composite(); renderLayers(); saveProjectsImmediate();
+  }
+  state.startPos=null;
+  state.lastPos=null;
+}
+function onPointerLeave(){
+  coordsLabel.textContent = `X: -- Y: --`;
+  if(!state.isDrawing) clearOverlay();
+}
+
+function drawOverlayPreview(pos){
+  const octx = overlayCanvas.getContext('2d');
+  clearOverlay();
+  octx.fillStyle = state.tool==='eraser' ? 'rgba(255,0,0,0.3)' : hexToRgba(state.colorPrimary, 0.4);
+  const s = state.brushSize;
+  const half = Math.floor(s/2);
+  octx.fillRect(pos.x - half, pos.y - half, s, s);
+}
+function drawOverlayPreviewShape(a,b){
+  const octx = overlayCanvas.getContext('2d');
+  clearOverlay();
+  octx.strokeStyle = hexToRgba(state.colorPrimary, 0.9);
+  octx.fillStyle = hexToRgba(state.colorPrimary, 0.3);
+  octx.lineWidth = 1;
+  if(state.tool==='line'){
+    octx.beginPath(); octx.moveTo(a.x+0.5, a.y+0.5); octx.lineTo(b.x+0.5, b.y+0.5); octx.stroke();
+  } else if(state.tool==='rect'){
+    const x=Math.min(a.x,b.x), y=Math.min(a.y,b.y), w=Math.abs(b.x-a.x)+1, h=Math.abs(b.y-a.y)+1;
+    octx.strokeRect(x+0.5,y+0.5,w-1,h-1);
+  } else if(state.tool==='circle'){
+    const cx=(a.x+b.x)/2, cy=(a.y+b.y)/2, rx=Math.abs(b.x-a.x)/2, ry=Math.abs(b.y-a.y)/2;
+    octx.beginPath(); octx.ellipse(cx+0.5, cy+0.5, rx, ry, 0,0,Math.PI*2); octx.stroke();
+  }
+}
+function clearOverlay(){
+  const octx = overlayCanvas.getContext('2d');
+  octx.clearRect(0,0,overlayCanvas.width, overlayCanvas.height);
+}
+
+function drawBrush(layer, from, to){
+  const ctx = layer.ctx;
+  ctx.imageSmoothingEnabled=false;
+  const isEraser = state.tool==='eraser';
+  const size = state.brushSize;
+  const half = Math.floor(size/2);
+  const alpha = state.brushOpacity/100;
+
+  // if eraser, use destination-out
+  // For pixel perfect, draw line via Bresenham
+  const points = bresenham(from.x, from.y, to.x, to.y);
+  ctx.globalAlpha = alpha;
+  if(isEraser){
+    ctx.globalCompositeOperation='destination-out';
+    ctx.fillStyle='rgba(0,0,0,1)';
+  } else {
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle=state.colorPrimary;
+  }
+
+  // To handle opacity per pixel, globalAlpha works
+  points.forEach(p=>{
+    // brush size
+    for(let dy=0; dy<size; dy++){
+      for(let dx=0; dx<size; dx++){
+        const x = p.x - half + dx;
+        const y = p.y - half + dy;
+        if(x<0||y<0||x>=layer.canvas.width||y>=layer.canvas.height) continue;
+        // perfect pixel: skip if needed? Simplified ignore
+        ctx.fillRect(x,y,1,1);
+        if(state.mirrorX){
+          const mx = layer.canvas.width -1 - x;
+          ctx.fillRect(mx,y,1,1);
+        }
+        if(state.mirrorY){
+          const my = layer.canvas.height -1 - y;
+          ctx.fillRect(x,my,1,1);
+        }
+        if(state.mirrorX && state.mirrorY){
+          const mx = layer.canvas.width -1 - x;
+          const my = layer.canvas.height -1 - y;
+          ctx.fillRect(mx,my,1,1);
+        }
+      }
+    }
+  });
+  ctx.globalAlpha=1;
+  ctx.globalCompositeOperation='source-over';
+  composite();
+}
+function bresenham(x0,y0,x1,y1){
+  const pts=[];
+  let dx=Math.abs(x1-x0), dy=Math.abs(y1-y0), sx=x0<x1?1:-1, sy=y0<y1?1:-1, err=dx-dy;
+  while(true){
+    pts.push({x:x0,y:y0});
+    if(x0===x1 && y0===y1) break;
+    let e2=err*2;
+    if(e2>-dy){ err-=dy; x0+=sx; }
+    if(e2<dx){ err+=dx; y0+=sy; }
+  }
+  return pts;
+}
+function drawShape(layer, a,b, type){
+  const ctx = layer.ctx;
+  ctx.imageSmoothingEnabled=false;
+  ctx.fillStyle = state.colorPrimary;
+  ctx.strokeStyle = state.colorPrimary;
+  ctx.globalAlpha = state.brushOpacity/100;
+  if(type==='line'){
+    // thick line via brush points
+    drawBrush(layer, a,b);
+    ctx.globalAlpha=1;
+    return;
+  } else if(type==='rect'){
+    const x=Math.min(a.x,b.x), y=Math.min(a.y,b.y), w=Math.abs(b.x-a.x)+1, h=Math.abs(b.y-a.y)+1;
+    // filled rect with brush opacity? Do outline if holding shift? For now filled with border 1px
+    // Use fillRect for pixel rect
+    // If brushSize >1, use stroke?
+    // Simple: filled rect with 1px border inside
+    ctx.fillRect(x,y,w,1);
+    ctx.fillRect(x,y+h-1,w,1);
+    ctx.fillRect(x,y,1,h);
+    ctx.fillRect(x+w-1,y,1,h);
+    // if wants fill, user can use fill tool; rect is outline
+  } else if(type==='circle'){
+    const cx=(a.x+b.x)/2, cy=(a.y+b.y)/2, rx=Math.abs(b.x-a.x)/2, ry=Math.abs(b.y-a.y)/2;
+    // pixel circle via midpoint - approximate with ellipse stroke
+    // Use manual pixel ellipse
+    const steps= Math.max( Math.abs(b.x-a.x), Math.abs(b.y-a.y))*2;
+    for(let i=0;i<steps;i++){
+      const ang = (i/steps)*Math.PI*2;
+      const x = Math.round(cx + Math.cos(ang)*rx);
+      const y = Math.round(cy + Math.sin(ang)*ry);
+      ctx.fillRect(x,y,1,1);
+    }
+  }
+  ctx.globalAlpha=1;
+  composite();
+}
+function floodFill(layer, sx,sy, fillColor){
+  const w = layer.canvas.width, h = layer.canvas.height;
+  if(sx<0||sy<0||sx>=w||sy>=h) return;
+  const ctx = layer.ctx;
+  const imgData = ctx.getImageData(0,0,w,h);
+  const data = imgData.data;
+  const stack = [[sx,sy]];
+  const startIdx = (sy*w+sx)*4;
+  const sr=data[startIdx], sg=data[startIdx+1], sb=data[startIdx+2], sa=data[startIdx+3];
+  const fillRgba = hexToRgbaArr(fillColor);
+  const fillA = Math.round((state.brushOpacity/100)*255);
+  // if same color, no op
+  if(sr===fillRgba[0] && sg===fillRgba[1] && sb===fillRgba[2] && sa===fillA) return;
+  // tolerance? perfect
+  const visited = new Uint8Array(w*h);
+  while(stack.length){
+    const [x,y]=stack.pop();
+    if(x<0||y<0||x>=w||y>=h) continue;
+    const idx = y*w+x;
+    if(visited[idx]) continue;
+    visited[idx]=1;
+    const i=idx*4;
+    if(data[i]!==sr || data[i+1]!==sg || data[i+2]!==sb || data[i+3]!==sa) continue;
+    data[i]=fillRgba[0]; data[i+1]=fillRgba[1]; data[i+2]=fillRgba[2]; data[i+3]=fillA;
+    stack.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);
+  }
+  ctx.putImageData(imgData,0,0);
+  // mirror fill? ignore
+}
+function hexToRgba(hex, a){
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function hexToRgbaArr(hex){
+  return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16), 255];
+}
+function pickColor(pos){
+  // composite visible? For picker we need actual pixel under cursor from composite or active layer?
+  // Use active layer's pixel first, fallback to composite
+  const layer = getActiveLayer();
+  if(!layer) return;
+  // get from composite: create temp composite canvas
+  const w=activeProject.width, h=activeProject.height;
+  const tmp = document.createElement('canvas');
+  tmp.width=w; tmp.height=h;
+  const tctx=tmp.getContext('2d');
+  activeProject.layers.forEach(l=>{
+    if(!l.visible) return;
+    tctx.globalAlpha = l.opacity/100;
+    tctx.drawImage(l.canvas, l.offsetX||0, l.offsetY||0);
+  });
+  const d = tctx.getImageData(pos.x,pos.y,1,1).data;
+  if(d[3]===0){ toast('ПРОЗРАЧНЫЙ ПИКСЕЛЬ'); return;}
+  const hex = '#' + [d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join('');
+  state.colorPrimary = hex;
+  colorPicker.value = hex;
+  colorHex.value = hex.toUpperCase();
+  updateColorUI(); renderPalette();
+  toast(`ЦВЕТ ПИПЕТКОЙ: ${hex.toUpperCase()}`);
+}
+
+// COMPOSITE
+function composite(){
+  if(!activeProject) return;
+  const mctx = mainCanvas.getContext('2d');
+  mctx.imageSmoothingEnabled=false;
+  mctx.clearRect(0,0,mainCanvas.width, mainCanvas.height);
+  // draw each visible layer
+  activeProject.layers.forEach(l=>{
+    if(!l.visible) return;
+    mctx.globalAlpha = l.opacity/100;
+    mctx.drawImage(l.canvas, l.offsetX||0, l.offsetY||0);
+  });
+  mctx.globalAlpha=1;
+
+  // onion skin? If enabled, show previous layer ghost
+  if($('#toggleOnion').checked){
+    // simple: draw previous layer with low alpha underneath?
+  }
+}
+
+// EXPORT
+function exportPNG(withBg){
+  if(!activeProject) return;
+  const scale = state.exportScale;
+  const w = activeProject.width * scale;
+  const h = activeProject.height * scale;
+  const out = document.createElement('canvas');
+  out.width=w; out.height=h;
+  const octx = out.getContext('2d');
+  octx.imageSmoothingEnabled=false;
+  // bg
+  let bg = state.exportBg;
+  if(withBg && bg==='transparent') bg = '#0a1f0a';
+  if(!withBg) bg='transparent';
+  // if bg is transparent, leave, else fill
+  if(bg!=='transparent'){
+    octx.fillStyle=bg;
+    octx.fillRect(0,0,w,h);
+  }
+  // draw layers scaled
+  activeProject.layers.forEach(l=>{
+    if(!l.visible) return;
+    octx.globalAlpha = l.opacity/100;
+    // need to draw layer canvas scaled + offset*scale
+    octx.drawImage(l.canvas, (l.offsetX||0)*scale, (l.offsetY||0)*scale, activeProject.width*scale, activeProject.height*scale);
+  });
+  octx.globalAlpha=1;
+
+  const a = document.createElement('a');
+  const suffix = withBg ? '_with_bg' : '';
+  a.download = `${activeProject.name.replace(/\s+/g,'_')}_${activeProject.width}x${activeProject.height}${suffix}.png`;
+  a.href = out.toDataURL('image/png');
+  a.click();
+  toast(`СКАЧАНО PNG ${w}×${h} ${bg==='transparent'?'БЕЗ ФОНА':'С ФОНОМ'}`);
+}
+async function copyPNG(){
+  if(!activeProject) return;
+  const scale = state.exportScale;
+  const w = activeProject.width * scale, h = activeProject.height * scale;
+  const out = document.createElement('canvas');
+  out.width=w; out.height=h;
+  const octx=out.getContext('2d');
+  octx.imageSmoothingEnabled=false;
+  if(state.exportBg!=='transparent'){
+    octx.fillStyle=state.exportBg; octx.fillRect(0,0,w,h);
+  }
+  activeProject.layers.forEach(l=>{
+    if(!l.visible) return;
+    octx.globalAlpha=l.opacity/100;
+    octx.drawImage(l.canvas, (l.offsetX||0)*scale, (l.offsetY||0)*scale, activeProject.width*scale, activeProject.height*scale);
+  });
+  out.toBlob(async blob=>{
+    try{
+      await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+      toast('СКОПИРОВАНО В БУФЕР');
+    }catch{
+      toast('НЕ УДАЛОСЬ СКОПИРОВАТЬ — СКАЧАЙ ФАЙЛОМ');
+    }
+  });
+}
+
+// IMPORT
+let pendingImportFile = null;
+let pendingImportURL = null;
+function handleImportFile(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  prepareImport(file);
+  e.target.value='';
+}
+function prepareImport(file){
+  pendingImportFile = file;
+  const url = URL.createObjectURL(file);
+  pendingImportURL = url;
+  $('#importPreview').src = url;
+  $('#importModal').style.display='grid';
+}
+function closeImportModal(){
+  $('#importModal').style.display='none';
+  if(pendingImportURL) URL.revokeObjectURL(pendingImportURL);
+  pendingImportFile=null; pendingImportURL=null;
+}
+function confirmImport(){
+  if(!pendingImportFile || !activeProject) return;
+  const mode = $('#importMode').value;
+  const asNew = $('#importAsNewLayer').checked;
+  const img = new Image();
+  img.onload = ()=>{
+    let targetLayer;
+    if(asNew){
+      const c = document.createElement('canvas');
+      c.width=activeProject.width; c.height=activeProject.height;
+      const ctx=c.getContext('2d'); ctx.imageSmoothingEnabled=false;
+      // draw according to mode
+      if(mode==='stretch'){
+        ctx.drawImage(img,0,0,activeProject.width, activeProject.height);
+      } else if(mode==='fit'){
+        const scale = Math.min(activeProject.width/img.width, activeProject.height/img.height);
+        const w=img.width*scale, h=img.height*scale;
+        const x=(activeProject.width-w)/2, y=(activeProject.height-h)/2;
+        ctx.drawImage(img,x,y,w,h);
+      } else if(mode==='center'){
+        const x=(activeProject.width-img.width)/2, y=(activeProject.height-img.height)/2;
+        ctx.drawImage(img,x,y);
+      } else if(mode==='pixelize'){
+        // pixelize: draw to small then scale up with no smoothing, also reduce colors
+        // draw stretched but with imageSmoothing false it's already pixelated
+        ctx.imageSmoothingEnabled=false;
+        ctx.drawImage(img,0,0,activeProject.width, activeProject.height);
+        // optional posterize: reduce colors to 16
+        // we could quantize
+      }
+      const layer = {id:uid(), name:'Импорт '+pendingImportFile.name.slice(0,12), visible:true, opacity:100, offsetX:0, offsetY:0, canvas:c, ctx, history:[], historyIndex:-1};
+      pushHistory(layer);
+      activeProject.layers.push(layer);
+      activeLayerId=layer.id;
+    } else {
+      const layer = getActiveLayer();
+      if(!layer) return;
+      pushHistory(layer);
+      // draw onto active layer
+      if(mode==='stretch') layer.ctx.drawImage(img,0,0,activeProject.width, activeProject.height);
+      else if(mode==='fit'){
+        const scale = Math.min(activeProject.width/img.width, activeProject.height/img.height);
+        const w=img.width*scale, h=img.height*scale;
+        const x=(activeProject.width-w)/2, y=(activeProject.height-h)/2;
+        layer.ctx.drawImage(img,x,y,w,h);
+      } else if(mode==='center'){
+        const x=(activeProject.width-img.width)/2, y=(activeProject.height-img.height)/2;
+        layer.ctx.drawImage(img,x,y);
+      } else if(mode==='pixelize'){
+        layer.ctx.drawImage(img,0,0,activeProject.width, activeProject.height);
+      }
+    }
+    composite(); renderLayers(); saveProjectsImmediate();
+    closeImportModal();
+    toast('ИЗОБРАЖЕНИЕ ИМПОРТИРОВАНО');
+  };
+  img.src = pendingImportURL;
+}
+
+// RESIZE
+function resizeCanvasFromInputs(){
+  const w = Math.max(1, Math.min(512, parseInt($('#canvasW').value)||activeProject.width));
+  const h = Math.max(1, Math.min(512, parseInt($('#canvasH').value)||activeProject.height));
+  if(w===activeProject.width && h===activeProject.height) return;
+  if(!confirm(`Изменить размер холста на ${w}×${h}? Пиксели обрежутся/расширятся.`)) return;
+  // resize each layer canvas
+  activeProject.layers.forEach(l=>{
+    pushHistory(l);
+    const nc = document.createElement('canvas');
+    nc.width=w; nc.height=h;
+    const nctx=nc.getContext('2d'); nctx.imageSmoothingEnabled=false;
+    // draw old onto new at 0,0
+    nctx.drawImage(l.canvas,0,0);
+    l.canvas=nc; l.ctx=nctx;
+  });
+  activeProject.width=w; activeProject.height=h;
+  canvasSizeLabel.textContent=`${w} × ${h}`;
+  setupCanvases(); renderLayers(); composite(); saveProjectsImmediate();
+  toast(`ХОЛСТ ИЗМЕНЁН: ${w}×${h}`);
+}
+
+// KEYBOARD
+function onKeyDown(e){
+  if($('#newProjectModal').style.display!=='none' || $('#importModal').style.display!=='none'){
+    if(e.key==='Escape'){ closeNewModal(); closeImportModal(); }
+    if(e.key==='Enter' && $('#newProjectModal').style.display!=='none'){ createProject(); }
+    return;
+  }
+  if(!activeProject || galleryView.style.display!=='none') return;
+  const mod = e.ctrlKey || e.metaKey;
+  if(mod && e.key.toLowerCase()==='z'){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); }
+  else if(mod && e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); }
+  else if(mod && e.key.toLowerCase()==='s'){ e.preventDefault(); saveProjects(); }
+  else if(e.key==='b' || e.key==='B' || e.key==='и'){ setTool('pencil'); }
+  else if(e.key==='e' || e.key==='у'){ setTool('eraser'); }
+  else if(e.key==='g' || e.key==='п'){ setTool('fill'); }
+  else if(e.key==='i' || e.key==='ш'){ setTool('picker'); }
+  else if(e.key==='v' || e.key==='м'){ setTool('move'); }
+  else if(e.key==='x' || e.key==='ч'){ // swap colors
+    let tmp=state.colorPrimary; state.colorPrimary=state.colorSecondary; state.colorSecondary=tmp;
+    colorPicker.value=state.colorPrimary; colorHex.value=state.colorPrimary.toUpperCase(); updateColorUI();
+  } else if(e.key==='['){ setBrushSize(state.brushSize-1); }
+  else if(e.key===']'){ setBrushSize(state.brushSize+1); }
+  else if(e.key==='ArrowUp' || e.key==='ArrowDown' || e.key==='ArrowLeft' || e.key==='ArrowRight'){
+    e.preventDefault();
+    const step = e.shiftKey? 10:1;
+    const map = {ArrowUp:[0,-step], ArrowDown:[0,step], ArrowLeft:[-step,0], ArrowRight:[step,0]};
+    const [dx,dy]=map[e.key];
+    nudgeLayer(dx,dy);
+  } else if(e.key==='Delete' || e.key==='Backspace'){
+    if(e.target.tagName!=='INPUT') clearActiveLayer();
+  }
+}
+function setTool(t){
+  state.tool=t;
+  $$('.tool-btn').forEach(b=> b.classList.toggle('active', b.dataset.tool===t));
+  statusTool.textContent='ИНСТРУМЕНТ: '+t.toUpperCase();
+  updateCursor();
+}
+function setBrushSize(s){
+  state.brushSize = Math.max(1, Math.min(4, s));
+  $$('.brush-btn').forEach(b=> b.classList.toggle('active', parseInt(b.dataset.size)===state.brushSize));
+}
+
+// TOAST
+function toast(msg){
+  const t=document.createElement('div');
+  t.className='toast'; t.textContent='> '+msg;
+  $('#toast').appendChild(t);
+  setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateY(6px)'; setTimeout(()=> t.remove(),300); },2200);
+}
+
+// INIT DEMO PROJECTS IF EMPTY
+if(projects.length===0){
+  // create demo empty? Leave emptyState
+}
+
