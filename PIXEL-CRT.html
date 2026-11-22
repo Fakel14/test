@@ -1,0 +1,2083 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PIXEL.CRT — Зелёный терминал пиксель-арта</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#050f05;
+  --bg2:#0a1f0a;
+  --bg3:#0f2f0f;
+  --panel:#0b1e0b;
+  --border:#1a4d1a;
+  --border2:#2a6b2a;
+  --green:#00ff41;
+  --green2:#00cc33;
+  --green-dim:#00aa2a;
+  --green-glow:0 0 8px rgba(0,255,65,0.6), 0 0 20px rgba(0,255,65,0.2);
+  --text:#b8ffb8;
+  --text-dim:#6a9a6a;
+  --accent:#39ff14;
+  --danger:#ff4141;
+}
+*{box-sizing:border-box}
+html,body{margin:0; height:100%; background:var(--bg); color:var(--text); font-family:'Share Tech Mono', monospace; overflow-x:hidden}
+body::before{
+  content:""; position:fixed; inset:0; pointer-events:none; z-index:9999;
+  background: repeating-linear-gradient(0deg, rgba(0,255,65,0.03) 0 2px, transparent 2px 4px);
+  opacity:0.5;
+}
+.scanlines{position:fixed; inset:0; pointer-events:none; z-index:9998; background:repeating-linear-gradient(0deg, rgba(0,0,0,0) 0 3px, rgba(0,255,65,0.04) 4px); opacity:0.35}
+.flicker{position:fixed; inset:0; pointer-events:none; z-index:9997; background:rgba(0,255,65,0.02); animation:flicker 0.15s infinite alternate; opacity:0.1}
+@keyframes flicker{0%{opacity:0.05}100%{opacity:0.12}}
+.vignette{position:fixed; inset:0; pointer-events:none; z-index:9996; background: radial-gradient(ellipse at center, transparent 60%, rgba(0,0,0,0.7) 100%)}
+
+/* header */
+.header{
+  position:sticky; top:0; z-index:100; display:flex; justify-content:space-between; align-items:center;
+  padding:10px 18px; background:linear-gradient(180deg, #0a2610, #051405); border-bottom:2px solid var(--border2);
+  box-shadow:0 2px 20px rgba(0,255,65,0.15), inset 0 1px 0 rgba(0,255,65,0.2);
+}
+.logo{display:flex; gap:12px; align-items:center}
+.logo-icon{font-size:28px; color:var(--green); text-shadow:var(--green-glow); letter-spacing:-2px; animation:glow 2s infinite alternate}
+@keyframes glow{from{text-shadow:0 0 6px var(--green)} to{text-shadow:0 0 14px var(--green), 0 0 30px var(--green)}}
+.logo-text h1{margin:0; font-family:'VT323', monospace; font-size:28px; color:var(--green); text-shadow:var(--green-glow); letter-spacing:3px; line-height:1}
+.logo-text span{font-size:10px; color:var(--text-dim); letter-spacing:1px}
+.header-stats{font-size:11px; color:var(--green-dim); margin-left:18px; border-left:1px solid var(--border); padding-left:12px}
+.blink{animation:blink 1s step-end infinite; color:var(--green)}
+@keyframes blink{50%{opacity:0}}
+.header-right{display:flex; gap:8px}
+
+/* buttons */
+.btn{
+  font-family:'Share Tech Mono', monospace; font-size:12px; letter-spacing:1px; text-transform:uppercase;
+  padding:8px 14px; border:1px solid var(--border2); background:var(--bg2); color:var(--green);
+  cursor:pointer; transition:all 0.15s; box-shadow:inset 0 0 0 1px rgba(0,255,65,0.05);
+}
+.btn:hover{background:var(--bg3); border-color:var(--green); box-shadow:var(--green-glow); transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn-primary{background:var(--green); color:#001100; border-color:var(--green); font-weight:700; text-shadow:none; box-shadow:0 0 12px rgba(0,255,65,0.5)}
+.btn-primary:hover{background:#00e63a; box-shadow:0 0 18px rgba(0,255,65,0.8)}
+.btn-ghost{background:transparent; border-color:var(--border)}
+.btn-small{padding:5px 8px; font-size:11px}
+.btn-large{padding:12px 22px; font-size:14px; letter-spacing:2px}
+.btn-block{width:100%; margin-top:6px}
+.btn:disabled{opacity:0.4; cursor:not-allowed}
+.icon-btn{
+  width:28px; height:28px; display:grid; place-items:center; border:1px solid var(--border2);
+  background:var(--bg2); color:var(--green); cursor:pointer; font-size:14px;
+}
+.icon-btn:hover{background:var(--green); color:#001100}
+.icon-btn.danger:hover{background:var(--danger); border-color:var(--danger); color:white}
+.badge{background:var(--green); color:#001100; font-size:10px; padding:1px 6px; margin-left:6px}
+
+/* views */
+.view{max-width:1320px; margin:0 auto; padding:18px}
+.gallery-hero{margin-bottom:18px}
+.hero-terminal{
+  border:2px solid var(--border2); background:linear-gradient(180deg, #0a1e0a, #050f05);
+  box-shadow:0 0 30px rgba(0,255,65,0.12), inset 0 1px 0 rgba(0,255,65,0.1);
+  position:relative; overflow:hidden;
+}
+.hero-terminal::before{
+  content:""; position:absolute; inset:0; background:repeating-linear-gradient(90deg, transparent 0 80px, rgba(0,255,65,0.02) 80px 81px); pointer-events:none;
+}
+.terminal-bar{display:flex; align-items:center; gap:6px; padding:8px 12px; background:#071407; border-bottom:1px solid var(--border); font-size:11px; color:var(--text-dim)}
+.terminal-bar .dot{width:10px; height:10px; border-radius:50%; display:inline-block}
+.dot.red{background:#ff5f57} .dot.yellow{background:#ffbd2e} .dot.green{background:#28c940}
+.term-title{margin-left:8px; flex:1}
+.term-ops{opacity:0.5}
+.hero-content{padding:18px 20px}
+.hero-content h2{margin:0 0 8px; font-family:'VT323', monospace; font-size:26px; color:var(--green); text-shadow:var(--green-glow); letter-spacing:1px}
+.cursor{animation:blink 0.8s step-end infinite}
+.hero-content p{margin:0 0 12px; color:var(--text-dim); font-size:13px; max-width:720px; line-height:1.5}
+.hero-features{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:14px}
+.hero-features span{border:1px solid var(--border); padding:4px 8px; font-size:11px; background:rgba(0,255,65,0.05); color:var(--green-dim)}
+
+.gallery-controls{display:flex; justify-content:space-between; gap:12px; margin-bottom:12px; flex-wrap:wrap}
+.search-wrap{display:flex; align-items:center; gap:8px; flex:1; min-width:220px; border:1px solid var(--border2); background:var(--bg2); padding:6px 10px}
+.search-wrap .prompt{color:var(--green)}
+.search-wrap input{flex:1; background:transparent; border:none; outline:none; color:var(--text); font-family:inherit; font-size:13px}
+.search-wrap input::placeholder{color:var(--text-dim)}
+.sort-wrap{display:flex; gap:6px}
+.sort-wrap .btn.active{background:var(--green); color:#001100}
+
+/* grid */
+.projects-grid{display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:14px}
+.project-card{
+  border:1px solid var(--border2); background:linear-gradient(180deg, #0c2412, #081a0b);
+  padding:10px; position:relative; cursor:pointer; transition:all 0.2s; overflow:hidden;
+}
+.project-card:hover{border-color:var(--green); box-shadow:0 0 18px rgba(0,255,65,0.2); transform:translateY(-2px)}
+.project-card::after{content:""; position:absolute; inset:0; background:repeating-linear-gradient(0deg, transparent 0 2px, rgba(0,255,65,0.03) 3px); pointer-events:none; opacity:0.4}
+.card-preview{
+  aspect-ratio:1; background:#000; border:1px solid var(--border); display:grid; place-items:center; overflow:hidden; position:relative;
+}
+.card-preview canvas{width:100%; height:100%; image-rendering:pixelated; image-rendering:crisp-edges}
+.card-meta{padding:8px 0 0; display:flex; justify-content:space-between; align-items:start; gap:8px}
+.card-title{font-family:'VT323', monospace; font-size:16px; color:var(--green); line-height:1; text-transform:uppercase}
+.card-sub{font-size:10px; color:var(--text-dim)}
+.card-actions{display:flex; gap:4px; margin-top:6px}
+.card-actions .btn{padding:4px 6px; font-size:10px}
+.empty-state{
+  border:1px dashed var(--border2); padding:40px 20px; text-align:center; color:var(--text-dim); background:rgba(0,255,65,0.03); margin-top:12px;
+}
+.empty-icon{font-size:32px; color:var(--green-dim); margin-bottom:8px}
+.empty-state.hidden{display:none}
+
+/* editor layout */
+.editor-layout{
+  display:grid; grid-template-columns:70px 1fr 300px; gap:12px; min-height:calc(100vh - 70px);
+}
+@media(max-width:1000px){
+  .editor-layout{grid-template-columns:60px 1fr; }
+  .sidebar{grid-column:1 / -1}
+}
+@media(max-width:640px){
+  .editor-layout{grid-template-columns:1fr}
+  .toolbar{order:2}
+  .canvas-area{order:1}
+}
+
+/* toolbar */
+.toolbar{
+  background:var(--panel); border:1px solid var(--border2); padding:8px; display:flex; flex-direction:column; gap:12px; height:fit-content; position:sticky; top:64px;
+}
+.tool-group{display:flex; flex-direction:column; gap:6px}
+.group-label{font-size:9px; letter-spacing:1.5px; color:var(--text-dim); border-bottom:1px solid var(--border); padding-bottom:4px}
+.tool-btn{
+  display:flex; flex-direction:column; align-items:center; gap:2px; padding:8px 4px;
+  background:var(--bg2); border:1px solid var(--border); color:var(--text-dim); cursor:pointer; font-family:inherit; font-size:11px;
+}
+.tool-btn span{font-size:18px; line-height:1}
+.tool-btn small{font-size:8px; letter-spacing:0.5px}
+.tool-btn:hover{border-color:var(--green-dim); color:var(--green)}
+.tool-btn.active{background:var(--green); color:#001100; border-color:var(--green); box-shadow:0 0 10px rgba(0,255,65,0.5)}
+.tool-btn.active small{color:#001100}
+.brush-sizes{display:grid; grid-template-columns:1fr 1fr; gap:4px}
+.brush-btn{aspect-ratio:1; border:1px solid var(--border); background:var(--bg2); color:var(--text-dim); cursor:pointer; font-family:inherit}
+.brush-btn.active{background:var(--green); color:#001100; border-color:var(--green)}
+.check{display:flex; align-items:center; gap:6px; font-size:11px; color:var(--text-dim); cursor:pointer}
+.check input{accent-color:var(--green)}
+
+/* canvas area */
+.canvas-area{
+  background:var(--panel); border:1px solid var(--border2); display:flex; flex-direction:column; min-height:500px;
+}
+.canvas-toolbar{
+  display:flex; justify-content:space-between; align-items:center; padding:8px 10px; border-bottom:1px solid var(--border); background:#071407; flex-wrap:wrap; gap:8px;
+}
+.canvas-info{font-size:11px; color:var(--text-dim); display:flex; gap:8px; align-items:center}
+.sep{opacity:0.3}
+.canvas-actions{display:flex; gap:6px; align-items:center}
+.viewport{
+  flex:1; background:#020802; position:relative; overflow:auto; display:grid; place-items:center; padding:24px;
+  background-image:
+    radial-gradient(rgba(0,255,65,0.06) 1px, transparent 1px);
+  background-size:22px 22px;
+}
+.canvas-stack{
+  position:relative; box-shadow:0 0 0 1px var(--border2), 0 0 30px rgba(0,255,65,0.15), 0 12px 40px rgba(0,0,0,0.6);
+  background:#000; line-height:0;
+}
+#checkerCanvas, #mainCanvas, #overlayCanvas{position:absolute; inset:0; width:100%; height:100%; image-rendering:pixelated; image-rendering:crisp-edges}
+#checkerCanvas{z-index:0}
+#mainCanvas{z-index:1}
+#overlayCanvas{z-index:2; pointer-events:auto; cursor:crosshair}
+.grid-overlay{position:absolute; inset:0; z-index:3; pointer-events:none; opacity:0.25}
+.statusbar{display:flex; justify-content:space-between; gap:10px; padding:6px 10px; font-size:10px; color:var(--text-dim); border-top:1px solid var(--border); background:#071407}
+
+/* sidebar */
+.sidebar{display:flex; flex-direction:column; gap:12px}
+.panel{background:var(--panel); border:1px solid var(--border2); padding:10px}
+.panel-header{
+  font-size:11px; letter-spacing:1.5px; color:var(--green); border-bottom:1px solid var(--border);
+  padding-bottom:6px; margin-bottom:8px; display:flex; align-items:center; justify-content:space-between;
+}
+.panel-actions{display:flex; gap:4px}
+.color-main{display:flex; gap:8px; align-items:center; margin-bottom:8px}
+.color-preview{display:flex; align-items:center; gap:6px}
+.color-swatch{width:32px; height:32px; border:2px solid var(--border2); background:var(--green); cursor:pointer; box-shadow:inset 0 0 0 1px rgba(0,0,0,0.3)}
+.color-swatch.secondary{width:22px; height:22px; opacity:0.9}
+.color-swatch.active{border-color:var(--green); box-shadow:0 0 8px rgba(0,255,65,0.6)}
+.color-swap{cursor:pointer; color:var(--green-dim); font-size:14px; padding:0 2px}
+.color-swap:hover{color:var(--green)}
+#colorPicker{width:32px; height:32px; border:none; padding:0; background:transparent; cursor:pointer}
+#colorHex{flex:1; background:var(--bg2); border:1px solid var(--border); color:var(--text); padding:6px 8px; font-family:inherit; font-size:12px}
+.palette-grid{display:grid; grid-template-columns:repeat(8, 1fr); gap:4px; margin-bottom:8px}
+.palette-cell{aspect-ratio:1; border:1px solid rgba(255,255,255,0.08); cursor:pointer; position:relative}
+.palette-cell:hover{outline:2px solid var(--green); z-index:1}
+.palette-cell.active{outline:2px solid var(--green); box-shadow:0 0 6px var(--green)}
+.palette-actions{display:flex; gap:6px; margin-bottom:8px}
+.opacity-row label{font-size:10px; color:var(--text-dim); display:flex; justify-content:space-between}
+.opacity-row input[type=range]{width:100%; accent-color:var(--green)}
+
+.layers-list{display:flex; flex-direction:column; gap:6px; max-height:320px; overflow:auto; scrollbar-width:thin; scrollbar-color:var(--border2) transparent}
+.layer-item{
+  display:grid; grid-template-columns:28px 1fr auto; gap:6px; align-items:center;
+  padding:6px; border:1px solid var(--border); background:var(--bg2); cursor:pointer; position:relative;
+}
+.layer-item.active{border-color:var(--green); background:#0f2f0f; box-shadow:inset 0 0 0 1px rgba(0,255,65,0.2)}
+.layer-item.dragging{opacity:0.5}
+.layer-thumb{width:28px; height:28px; background:#000; border:1px solid var(--border); image-rendering:pixelated; overflow:hidden}
+.layer-thumb canvas{width:100%; height:100%; image-rendering:pixelated}
+.layer-meta{overflow:hidden}
+.layer-name{font-size:11px; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+.layer-name input{background:transparent; border:1px solid var(--green); color:var(--green); font:inherit; width:100%; padding:2px 4px}
+.layer-sub{font-size:9px; color:var(--text-dim)}
+.layer-controls-row{display:flex; gap:4px; align-items:center}
+.icon-mini{width:22px; height:22px; display:grid; place-items:center; border:1px solid var(--border); background:transparent; color:var(--text-dim); cursor:pointer; font-size:11px}
+.icon-mini:hover{border-color:var(--green); color:var(--green)}
+.icon-mini.active{color:var(--green); border-color:var(--green); background:rgba(0,255,65,0.1)}
+.opacity-mini{width:70px}
+.opacity-mini input{width:100%; height:4px; accent-color:var(--green)}
+
+.layer-move-row{display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-top:8px}
+.layer-import{margin-top:8px; border-top:1px solid var(--border); padding-top:8px}
+.import-hint{font-size:10px; color:var(--text-dim); text-align:center; margin-top:4px}
+
+.export-grid{display:flex; flex-direction:column; gap:8px}
+.export-grid label{font-size:10px; color:var(--text-dim); letter-spacing:1px}
+.bg-options{display:flex; gap:4px; flex-wrap:wrap}
+.bg-btn{padding:4px 6px; font-size:10px; border:1px solid var(--border); background:var(--bg2); color:var(--text-dim); cursor:pointer; font-family:inherit}
+.bg-btn.active{background:var(--green); color:#001100; border-color:var(--green)}
+#exportBgColor{width:28px; height:28px; border:1px solid var(--border); padding:0}
+#exportScale{width:100%; background:var(--bg2); border:1px solid var(--border); color:var(--text); padding:6px; font-family:inherit}
+.split-2{display:grid; grid-template-columns:1fr 1fr; gap:6px}
+
+.canvas-settings{display:flex; flex-direction:column; gap:8px}
+.canvas-settings .row{display:grid; grid-template-columns:auto 1fr auto 1fr; gap:6px; align-items:center}
+.canvas-settings input[type=number]{background:var(--bg2); border:1px solid var(--border); color:var(--text); padding:6px; font-family:inherit; width:100%}
+.canvas-settings label{font-size:10px; color:var(--text-dim)}
+
+/* modal */
+.modal{position:fixed; inset:0; z-index:200; display:grid; place-items:center; padding:16px}
+.modal-backdrop{position:absolute; inset:0; background:rgba(0,15,0,0.7); backdrop-filter:blur(4px)}
+.modal-window{
+  position:relative; width:min(520px, 100%); background:linear-gradient(180deg, #0f2f0f, #071607);
+  border:2px solid var(--green); box-shadow:0 0 30px rgba(0,255,65,0.3), 0 20px 60px rgba(0,0,0,0.6);
+}
+.modal-window.small{width:min(420px, 100%)}
+.modal-header{display:flex; justify-content:space-between; align-items:center; padding:12px 14px; border-bottom:1px solid var(--border); background:#0a1e0a}
+.modal-header h3{margin:0; font-family:'VT323', monospace; font-size:18px; color:var(--green); letter-spacing:1px}
+.modal-body{padding:14px}
+.modal-body label{display:block; font-size:11px; letter-spacing:1px; color:var(--green-dim); margin:10px 0 6px}
+.modal-body input[type=text], .modal-body input[type=number], .modal-body select{
+  width:100%; background:#020802; border:1px solid var(--border2); color:var(--text); padding:8px 10px; font-family:inherit; font-size:13px;
+}
+.size-presets{display:grid; grid-template-columns:repeat(3, 1fr); gap:6px}
+.preset-btn{
+  padding:10px 6px; background:var(--bg2); border:1px solid var(--border); color:var(--text-dim); cursor:pointer; font-family:inherit; font-size:13px; text-align:center; line-height:1.1;
+}
+.preset-btn small{font-size:10px; opacity:0.7}
+.preset-btn:hover{border-color:var(--green-dim); color:var(--green)}
+.preset-btn.active{background:var(--green); color:#001100; border-color:var(--green); box-shadow:0 0 10px rgba(0,255,65,0.4)}
+.size-inputs{display:flex; gap:10px; align-items:end}
+.size-inputs>div{flex:1}
+.size-inputs .x{padding-bottom:8px; color:var(--green-dim)}
+.size-hint{font-size:11px; color:var(--text-dim); margin-top:6px; text-align:center}
+.custom-size{border:1px solid var(--border); padding:8px; margin-top:8px; background:rgba(0,255,65,0.03)}
+.modal-actions{display:flex; justify-content:flex-end; gap:8px; margin-top:14px}
+
+/* toast */
+#toast{position:fixed; bottom:18px; left:50%; transform:translateX(-50%); z-index:300; display:flex; flex-direction:column; gap:8px; pointer-events:none}
+.toast{
+  background:#0a1e0a; border:1px solid var(--green); color:var(--green); padding:10px 14px; font-size:12px; letter-spacing:0.5px;
+  box-shadow:0 0 20px rgba(0,255,65,0.3); animation:slideUp 0.2s ease; min-width:260px; text-align:center;
+}
+@keyframes slideUp{from{transform:translateY(10px); opacity:0} to{transform:translateY(0); opacity:1}}
+
+/* scrollbars */
+::-webkit-scrollbar{width:8px; height:8px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border2); border:1px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:var(--green-dim)}
+
+/* draggable ghost */
+.drag-ghost{opacity:0.3}
+
+/* pixelated selection */
+::selection{background:var(--green); color:#001100}
+
+</style>
+</head>
+<body>
+<div class="scanlines"></div>
+<div class="flicker"></div>
+<div class="vignette"></div>
+
+<header class="header">
+  <div class="header-left">
+    <div class="logo">
+      <div class="logo-icon">█▓▒░</div>
+      <div class="logo-text">
+        <h1>PIXEL.CRT</h1>
+        <span>ЗЕЛЁНЫЙ ТЕРМИНАЛ v1.0 //  phosphor display</span>
+      </div>
+    </div>
+    <div class="header-stats" id="headerStats">
+      <span class="blink">●</span> СИСТЕМА ГОТОВА
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="btn btn-ghost" id="btnGallery">◰ ПРОЕКТЫ</button>
+    <button class="btn btn-primary" id="btnNewProject">+ НОВЫЙ ПРОЕКТ</button>
+    <button class="btn btn-ghost" id="btnEditorBack" style="display:none">← НАЗАД</button>
+  </div>
+</header>
+
+<!-- GALLERY VIEW -->
+<main id="galleryView" class="view">
+  <section class="gallery-hero">
+    <div class="hero-terminal">
+      <div class="terminal-bar">
+        <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+        <span class="term-title">/home/pixel/projects — phosphor_os</span>
+        <span class="term-ops">[ ░▒▓ █ ]</span>
+      </div>
+      <div class="hero-content">
+        <h2>> ИНИЦИАЛИЗАЦИЯ_ПИКСЕЛЬ_МАТРИЦЫ<span class="cursor">█</span></h2>
+        <p>Рисуй пиксель-арт в любом разрешении. Слои, прозрачность, перемещение, импорт фото — всё как в Photoshop, только честные пиксели и зелёное свечение ЭЛТ.</p>
+        <div class="hero-features">
+          <span>▣ ЛЮБОЕ РАЗРЕШЕНИЕ</span>
+          <span>▣ СЛОИ + ПРОЗРАЧНОСТЬ</span>
+          <span>▣ ИМПОРТ ФОТО</span>
+          <span>▣ ЭКСПОРТ PNG</span>
+          <span>▣ UNDO / REDO</span>
+        </div>
+        <button class="btn btn-primary btn-large" id="btnHeroNew">▶ СОЗДАТЬ МАТРИЦУ</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="gallery-controls">
+    <div class="search-wrap">
+      <span class="prompt">></span>
+      <input id="searchInput" placeholder="поиск по имени проекта...">
+    </div>
+    <div class="sort-wrap">
+      <button class="btn btn-small active" data-sort="new">СНАЧАЛА НОВЫЕ</button>
+      <button class="btn btn-small" data-sort="old">СТАРЫЕ</button>
+      <button class="btn btn-small" data-sort="name">ПО ИМЕНИ</button>
+    </div>
+  </section>
+
+  <section id="projectsGrid" class="projects-grid"></section>
+  <div id="emptyState" class="empty-state">
+    <div class="empty-icon">[ ░░░ ]</div>
+    <h3>НЕТ ПРОЕКТОВ В ПАМЯТИ</h3>
+    <p>Создай первую матрицу — выбери размер в пикселях и начни жечь фосфор.</p>
+    <button class="btn btn-primary" id="btnEmptyNew">+ СОЗДАТЬ ПРОЕКТ</button>
+  </div>
+</main>
+
+<!-- EDITOR VIEW -->
+<main id="editorView" class="view" style="display:none">
+  <div class="editor-layout">
+    <!-- LEFT TOOLBAR -->
+    <aside class="toolbar">
+      <div class="tool-group">
+        <div class="group-label">ИНСТРУМЕНТ</div>
+        <button class="tool-btn active" data-tool="pencil" title="Карандаш (B)"><span>✎</span><small>КАРАНДАШ</small></button>
+        <button class="tool-btn" data-tool="eraser" title="Ластик (E)"><span>⌫</span><small>ЛАСТИК</small></button>
+        <button class="tool-btn" data-tool="fill" title="Заливка (G)"><span>▦</span><small>ЗАЛИВКА</small></button>
+        <button class="tool-btn" data-tool="picker" title="Пипетка (I)"><span>◉</span><small>ПИПЕТКА</small></button>
+        <button class="tool-btn" data-tool="line" title="Линия (L)"><span>╱</span><small>ЛИНИЯ</small></button>
+        <button class="tool-btn" data-tool="rect" title="Прямоугольник (R)"><span>▭</span><small>ПРЯМОУГ.</small></button>
+        <button class="tool-btn" data-tool="circle" title="Эллипс (C)"><span>○</span><small>ЭЛЛИПС</small></button>
+        <button class="tool-btn" data-tool="move" title="Перемещение слоя (V)"><span>✋</span><small>ДВИГАТЬ</small></button>
+      </div>
+      <div class="tool-group">
+        <div class="group-label">КИСТЬ</div>
+        <div class="brush-sizes">
+          <button class="brush-btn active" data-size="1">1</button>
+          <button class="brush-btn" data-size="2">2</button>
+          <button class="brush-btn" data-size="3">3</button>
+          <button class="brush-btn" data-size="4">4</button>
+        </div>
+        <label class="check"><input type="checkbox" id="perfectPixel"> <span>Идеальный пиксель</span></label>
+      </div>
+      <div class="tool-group">
+        <div class="group-label">ДЕЙСТВИЯ</div>
+        <button class="btn btn-ghost btn-block" id="btnUndo">↩ ОТМЕНИТЬ</button>
+        <button class="btn btn-ghost btn-block" id="btnRedo">↪ ПОВТОРИТЬ</button>
+        <button class="btn btn-ghost btn-block" id="btnClearLayer">⌧ ОЧИСТИТЬ СЛОЙ</button>
+      </div>
+    </aside>
+
+    <!-- CENTER CANVAS -->
+    <section class="canvas-area">
+      <div class="canvas-toolbar">
+        <div class="canvas-info">
+          <span id="canvasSizeLabel">32 × 32</span>
+          <span class="sep">|</span>
+          <span id="coordsLabel">X: -- Y: --</span>
+          <span class="sep">|</span>
+          <span id="zoomLabel">1200%</span>
+        </div>
+        <div class="canvas-actions">
+          <button class="btn btn-small" id="btnZoomOut">−</button>
+          <button class="btn btn-small" id="btnZoomReset">100%</button>
+          <button class="btn btn-small" id="btnZoomIn">+</button>
+          <span class="sep"></span>
+          <label class="check"><input type="checkbox" id="toggleGrid" checked><span>СЕТКА</span></label>
+          <label class="check"><input type="checkbox" id="toggleChecker" checked><span>ШАХМАТЫ</span></label>
+          <label class="check"><input type="checkbox" id="toggleOnion"><span>ЛУК</span></label>
+        </div>
+      </div>
+      <div class="viewport" id="viewport">
+        <div class="canvas-stack" id="canvasStack">
+          <canvas id="checkerCanvas"></canvas>
+          <canvas id="mainCanvas"></canvas>
+          <canvas id="overlayCanvas"></canvas>
+          <div class="grid-overlay" id="gridOverlay"></div>
+        </div>
+      </div>
+      <div class="statusbar">
+        <span id="statusTool">ИНСТРУМЕНТ: КАРАНДАШ</span>
+        <span id="statusLayer">СЛОЙ: 1</span>
+        <span id="statusColor">ЦВЕТ: #00FF41</span>
+      </div>
+    </section>
+
+    <!-- RIGHT SIDEBAR -->
+    <aside class="sidebar">
+      <!-- Colors -->
+      <div class="panel">
+        <div class="panel-header">▣ ПАЛИТРА</div>
+        <div class="color-main">
+          <div class="color-preview">
+            <div class="color-swatch active" id="primaryColorSwatch" title="Основной цвет"></div>
+            <div class="color-swap" id="swapColors" title="Поменять местами (X)">⇅</div>
+            <div class="color-swatch secondary" id="secondaryColorSwatch" title="Второй цвет"></div>
+          </div>
+          <input type="color" id="colorPicker" value="#00ff41">
+          <input type="text" id="colorHex" value="#00FF41" maxlength="7">
+        </div>
+        <div class="palette-grid" id="paletteGrid"></div>
+        <div class="palette-actions">
+          <button class="btn btn-small" id="btnAddToPalette">+ В ПАЛИТРУ</button>
+          <button class="btn btn-small" id="btnPickPalette">ЗАГРУЗИТЬ ПАЛИТРУ</button>
+        </div>
+        <div class="opacity-row">
+          <label>НЕПРОЗРАЧНОСТЬ КИСТИ <span id="brushOpacityVal">100%</span></label>
+          <input type="range" id="brushOpacity" min="0" max="100" value="100">
+        </div>
+      </div>
+
+      <!-- Layers -->
+      <div class="panel layers-panel">
+        <div class="panel-header">▣ СЛОИ <span id="layersCount" class="badge">0</span>
+          <div class="panel-actions">
+            <button class="icon-btn" id="btnAddLayer" title="Новый слой">+</button>
+            <button class="icon-btn" id="btnDupLayer" title="Дублировать">⧉</button>
+            <button class="icon-btn" id="btnMergeDown" title="Объединить вниз">⤓</button>
+            <button class="icon-btn danger" id="btnDeleteLayer" title="Удалить">×</button>
+          </div>
+        </div>
+        <div class="layers-list" id="layersList"></div>
+        <div class="layer-controls">
+          <div class="layer-move-row">
+            <button class="btn btn-small" id="btnMoveUp">▲ ВВЕРХ</button>
+            <button class="btn btn-small" id="btnMoveDown">▼ ВНИЗ</button>
+            <button class="btn btn-small" id="btnLayerUpPx">↑ СДВИГ</button>
+            <button class="btn btn-small" id="btnLayerDownPx">↓</button>
+            <button class="btn btn-small" id="btnLayerLeftPx">←</button>
+            <button class="btn btn-small" id="btnLayerRightPx">→</button>
+          </div>
+          <div class="layer-import">
+            <label class="btn btn-small btn-block" style="cursor:pointer; text-align:center">
+              ⬆ ИМПОРТ ФОТО В СЛОЙ
+              <input type="file" id="importImage" accept="image/*" style="display:none">
+            </label>
+            <div class="import-hint">перетащи картинку на холст</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export -->
+      <div class="panel">
+        <div class="panel-header">▣ ЭКСПОРТ</div>
+        <div class="export-grid">
+          <label>ФОН ЭКСПОРТА</label>
+          <div class="bg-options">
+            <button class="bg-btn active" data-bg="transparent">ПРОЗРАЧНЫЙ</button>
+            <button class="bg-btn" data-bg="#0a1f0a">ТЁМНЫЙ</button>
+            <button class="bg-btn" data-bg="#001a00">ЧЁРНО-ЗЕЛ.</button>
+            <button class="bg-btn" data-bg="#ffffff">БЕЛЫЙ</button>
+            <input type="color" id="exportBgColor" value="#0a1f0a" title="Свой цвет">
+          </div>
+          <label>МАСШТАБ ЭКСПОРТА</label>
+          <select id="exportScale">
+            <option value="1">1× — как есть</option>
+            <option value="2">2×</option>
+            <option value="4" selected>4×</option>
+            <option value="8">8×</option>
+            <option value="16">16×</option>
+          </select>
+          <button class="btn btn-primary btn-block" id="btnExportPng">⬇ СКАЧАТЬ PNG</button>
+          <button class="btn btn-ghost btn-block" id="btnExportPngBg">⬇ СКАЧАТЬ С ФОНОМ</button>
+          <div class="split-2">
+            <button class="btn btn-small btn-block" id="btnCopyPng">КОПИРОВАТЬ</button>
+            <button class="btn btn-small btn-block" id="btnSaveProject">💾 СОХРАНИТЬ</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Canvas settings -->
+      <div class="panel">
+        <div class="panel-header">▣ ХОЛСТ</div>
+        <div class="canvas-settings">
+          <div class="row">
+            <label>ШИРИНА</label><input type="number" id="canvasW" min="1" max="512" value="32">
+            <label>ВЫСОТА</label><input type="number" id="canvasH" min="1" max="512" value="32">
+          </div>
+          <button class="btn btn-small btn-block" id="btnResizeCanvas">ПРИМЕНИТЬ РАЗМЕР</button>
+          <label class="check"><input type="checkbox" id="mirrorX"> <span>ЗЕРКАЛО X</span></label>
+          <label class="check"><input type="checkbox" id="mirrorY"> <span>ЗЕРКАЛО Y</span></label>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<!-- NEW PROJECT MODAL -->
+<div id="newProjectModal" class="modal" style="display:none">
+  <div class="modal-backdrop"></div>
+  <div class="modal-window">
+    <div class="modal-header">
+      <h3>◰ НОВАЯ МАТРИЦА</h3>
+      <button class="icon-btn" id="closeModal">×</button>
+    </div>
+    <div class="modal-body">
+      <label>НАЗВАНИЕ ПРОЕКТА</label>
+      <input type="text" id="newProjectName" placeholder="например, ZELENO-GRID 07" value="PIXEL_01">
+
+      <label>РАЗМЕР В ПИКСЕЛЯХ</label>
+      <div class="size-presets">
+        <button class="preset-btn" data-w="8" data-h="8">8×8<br><small>иконка</small></button>
+        <button class="preset-btn" data-w="16" data-h="16">16×16<br><small>спрайт</small></button>
+        <button class="preset-btn active" data-w="32" data-h="32">32×32<br><small>классика</small></button>
+        <button class="preset-btn" data-w="64" data-h="64">64×64<br><small>арт</small></button>
+        <button class="preset-btn" data-w="128" data-h="128">128×128<br><small>постер</small></button>
+        <button class="preset-btn" data-w="64" data-h="32">64×32<br><small>широкий</small></button>
+      </div>
+      <div class="custom-size">
+        <div class="size-inputs">
+          <div><label>ШИРИНА</label><input type="number" id="newW" min="1" max="512" value="32"></div>
+          <span class="x">×</span>
+          <div><label>ВЫСОТА</label><input type="number" id="newH" min="1" max="512" value="32"></div>
+        </div>
+        <div class="size-hint"><span id="pixelCount">1024</span> пикселей • <span id="sizeHint">оптимально для спрайтов</span></div>
+      </div>
+
+      <label>ФОН ХОЛСТА</label>
+      <div class="bg-options">
+        <button class="bg-btn active" data-bgmodal="transparent">ПРОЗРАЧНЫЙ</button>
+        <button class="bg-btn" data-bgmodal="#0a1f0a">ТЁМНЫЙ</button>
+        <button class="bg-btn" data-bgmodal="#001100">ЧЁРНЫЙ</button>
+        <input type="color" id="newBgColor" value="#0a1f0a">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="cancelModal">ОТМЕНА</button>
+        <button class="btn btn-primary" id="createProjectBtn">▶ СОЗДАТЬ — ENTER</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- IMPORT MODAL -->
+<div id="importModal" class="modal" style="display:none">
+  <div class="modal-backdrop"></div>
+  <div class="modal-window small">
+    <div class="modal-header"><h3>⬆ ИМПОРТ ИЗОБРАЖЕНИЯ</h3><button class="icon-btn" id="closeImportModal">×</button></div>
+    <div class="modal-body">
+      <div id="importPreviewWrap" style="background:#000; padding:8px; border:1px solid #00ff41; margin-bottom:10px; text-align:center">
+        <img id="importPreview" style="max-width:100%; image-rendering:pixelated">
+      </div>
+      <label>РЕЖИМ</label>
+      <select id="importMode">
+        <option value="stretch">Растянуть на весь холст</option>
+        <option value="fit">Вписать с сохранением пропорций</option>
+        <option value="center">По центру без масштаба</option>
+        <option value="pixelize">Пикселизовать (уменьшить цвета)</option>
+      </select>
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="importAsNewLayer" checked> <span>Как новый слой</span></label>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="cancelImport">ОТМЕНА</button>
+        <button class="btn btn-primary" id="confirmImport">ИМПОРТИРОВАТЬ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* PIXEL.CRT — Green phosphor pixel art editor */
+const STORAGE_KEY = 'pixelCRT_projects_v2';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+
+let projects = loadProjects();
+let activeProject = null;
+let activeLayerId = null;
+let sortMode = 'new';
+let searchQuery = '';
+
+let state = {
+  tool: 'pencil',
+  brushSize: 1,
+  brushOpacity: 100,
+  colorPrimary: '#00ff41',
+  colorSecondary: '#002200',
+  zoom: 16, // pixel size
+  isDrawing: false,
+  startPos: null,
+  lastPos: null,
+  perfectPixel: false,
+  mirrorX: false,
+  mirrorY: false,
+  exportBg: 'transparent',
+  exportScale: 4,
+  history: [], // global for undo? per layer
+};
+
+// PALETTE
+const defaultPalette = [
+  '#000000','#0a1f0a','#1a4d1a','#2a6b2a','#00ff41','#00cc33','#66ff66','#b8ffb8',
+  '#ffffff','#c0c0c0','#7a7a7a','#3a3a3a','#ff0040','#ffaa00','#00aaff','#aa00ff',
+  '#ffd700','#ff6b00','#ff00ff','#00ffff','#8b4513','#deb887','#4a4a4a','#002200',
+  '#003300','#004400','#005500','#006600','#007700','#008800','#99ff99','#ccffcc',
+];
+let palette = [...defaultPalette];
+
+// DOM refs
+const galleryView = $('#galleryView');
+const editorView = $('#editorView');
+const projectsGrid = $('#projectsGrid');
+const emptyState = $('#emptyState');
+const canvasSizeLabel = $('#canvasSizeLabel');
+const coordsLabel = $('#coordsLabel');
+const zoomLabel = $('#zoomLabel');
+const statusTool = $('#statusTool');
+const statusLayer = $('#statusLayer');
+const statusColor = $('#statusColor');
+const viewport = $('#viewport');
+const canvasStack = $('#canvasStack');
+const mainCanvas = $('#mainCanvas');
+const checkerCanvas = $('#checkerCanvas');
+const overlayCanvas = $('#overlayCanvas');
+const gridOverlay = $('#gridOverlay');
+const layersList = $('#layersList');
+const layersCount = $('#layersCount');
+const paletteGrid = $('#paletteGrid');
+const primarySwatch = $('#primaryColorSwatch');
+const secondarySwatch = $('#secondaryColorSwatch');
+const colorPicker = $('#colorPicker');
+const colorHex = $('#colorHex');
+const brushOpacity = $('#brushOpacity');
+const brushOpacityVal = $('#brushOpacityVal');
+
+// INIT
+init();
+
+function init(){
+  bindEvents();
+  renderPalette();
+  updateColorUI();
+  renderGallery();
+  updateHeaderStats();
+  // auto show gallery
+  showGallery();
+  // checker setup
+  // keyboard
+  window.addEventListener('keydown', onKeyDown);
+}
+
+function bindEvents(){
+  // gallery buttons
+  $('#btnGallery').onclick = showGallery;
+  $('#btnNewProject').onclick = openNewModal;
+  $('#btnEditorBack').onclick = showGallery;
+  $('#btnHeroNew').onclick = openNewModal;
+  $('#btnEmptyNew').onclick = openNewModal;
+
+  // new project modal
+  $('#closeModal').onclick = closeNewModal;
+  $('#cancelModal').onclick = closeNewModal;
+  $('#newProjectModal .modal-backdrop').onclick = closeNewModal;
+  $('#createProjectBtn').onclick = createProject;
+  // size presets
+  $$('.preset-btn').forEach(b=>{
+    b.onclick = ()=>{
+      $$('.preset-btn').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      $('#newW').value = b.dataset.w;
+      $('#newH').value = b.dataset.h;
+      updatePixelCount();
+    };
+  });
+  $('#newW').addEventListener('input', ()=>{ $$('.preset-btn').forEach(x=>x.classList.remove('active')); updatePixelCount();});
+  $('#newH').addEventListener('input', updatePixelCount);
+  $$('[data-bgmodal]').forEach(b=> b.onclick = ()=>{
+    $$('[data-bgmodal]').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+  });
+  $('#searchInput').addEventListener('input', e=>{ searchQuery = e.target.value.toLowerCase(); renderGallery();});
+  $$('[data-sort]').forEach(b=> b.onclick = ()=>{
+    $$('[data-sort]').forEach(x=>x.classList.remove('active'));
+    b.classList.add('active');
+    sortMode = b.dataset.sort;
+    renderGallery();
+  });
+
+  // toolbar tools
+  $$('.tool-btn').forEach(btn=>{
+    btn.onclick = ()=>{
+      $$('.tool-btn').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      state.tool = btn.dataset.tool;
+      statusTool.textContent = 'ИНСТРУМЕНТ: ' + btn.textContent.trim();
+      updateCursor();
+    };
+  });
+  $$('.brush-btn').forEach(b=>{
+    b.onclick = ()=>{
+      $$('.brush-btn').forEach(x=>x.classList.remove('active'));
+      b.classList.add('active');
+      state.brushSize = parseInt(b.dataset.size);
+    };
+  });
+  $('#perfectPixel').onchange = e=> state.perfectPixel = e.target.checked;
+  $('#mirrorX').onchange = e=> state.mirrorX = e.target.checked;
+  $('#mirrorY').onchange = e=> state.mirrorY = e.target.checked;
+
+  $('#btnUndo').onclick = undo;
+  $('#btnRedo').onclick = redo;
+  $('#btnClearLayer').onclick = clearActiveLayer;
+
+  // canvas toolbar
+  $('#btnZoomIn').onclick = ()=> setZoom(state.zoom + 2);
+  $('#btnZoomOut').onclick = ()=> setZoom(state.zoom - 2);
+  $('#btnZoomReset').onclick = ()=> setZoom(16);
+  $('#toggleGrid').onchange = e=> gridOverlay.style.display = e.target.checked ? 'block' : 'none';
+  $('#toggleChecker').onchange = e=> checkerCanvas.style.display = e.target.checked ? 'block' : 'none';
+  $('#toggleOnion').onchange = () => composite();
+
+  // colors
+  colorPicker.oninput = e=>{
+    state.colorPrimary = e.target.value;
+    colorHex.value = e.target.value.toUpperCase();
+    updateColorUI();
+  };
+  colorHex.oninput = e=>{
+    let v = e.target.value;
+    if(/^#[0-9A-Fa-f]{6}$/.test(v)){
+      state.colorPrimary = v;
+      colorPicker.value = v;
+      updateColorUI();
+    }
+  };
+  primarySwatch.onclick = ()=> colorPicker.click();
+  secondarySwatch.onclick = ()=>{
+    // swap?
+    let tmp = state.colorPrimary;
+    state.colorPrimary = state.colorSecondary;
+    state.colorSecondary = tmp;
+    colorPicker.value = state.colorPrimary;
+    colorHex.value = state.colorPrimary.toUpperCase();
+    updateColorUI();
+  };
+  $('#swapColors').onclick = ()=>{
+    let tmp = state.colorPrimary;
+    state.colorPrimary = state.colorSecondary;
+    state.colorSecondary = tmp;
+    colorPicker.value = state.colorPrimary;
+    colorHex.value = state.colorPrimary.toUpperCase();
+    updateColorUI();
+  };
+  brushOpacity.oninput = e=>{
+    state.brushOpacity = parseInt(e.target.value);
+    brushOpacityVal.textContent = state.brushOpacity + '%';
+  };
+  $('#btnAddToPalette').onclick = ()=>{
+    if(!palette.includes(state.colorPrimary)){
+      palette.unshift(state.colorPrimary);
+      if(palette.length>64) palette.pop();
+      renderPalette();
+      toast('ЦВЕТ ДОБАВЛЕН В ПАЛИТРУ');
+    }
+  };
+  $('#btnPickPalette').onclick = ()=>{
+    // cycle some palettes
+    const palettes = [
+      defaultPalette,
+      ['#000000','#1a1a2e','#16213e','#0f3460','#533483','#e94560','#ffffff','#00ff41'],
+      ['#000000','#2b2d42','#8d99ae','#edf2f4','#ef233c','#d90429','#00ff99','#ffbe0b'],
+      ['#0d1b2a','#1b263b','#415a77','#778da9','#e0e1dd','#00ff41','#00cc33','#99ff99'],
+      ['#000000','#3a0ca3','#7209b7','#f72585','#4361ee','#4cc9f0','#ffd166','#00ff41'],
+    ];
+    let idx = Math.floor(Math.random()*palettes.length);
+    palette = [...palettes[idx]];
+    renderPalette();
+    toast('ПАЛИТРА ЗАГРУЖЕНА');
+  };
+
+  // layers
+  $('#btnAddLayer').onclick = addLayer;
+  $('#btnDeleteLayer').onclick = deleteLayer;
+  $('#btnDupLayer').onclick = duplicateLayer;
+  $('#btnMergeDown').onclick = mergeDown;
+  $('#btnMoveUp').onclick = ()=> moveLayer(1);
+  $('#btnMoveDown').onclick = ()=> moveLayer(-1);
+  $('#btnLayerUpPx').onclick = ()=> nudgeLayer(0,-1);
+  $('#btnLayerDownPx').onclick = ()=> nudgeLayer(0,1);
+  $('#btnLayerLeftPx').onclick = ()=> nudgeLayer(-1,0);
+  $('#btnLayerRightPx').onclick = ()=> nudgeLayer(1,0);
+
+  // import
+  $('#importImage').onchange = handleImportFile;
+  $('#closeImportModal').onclick = closeImportModal;
+  $('#cancelImport').onclick = closeImportModal;
+  $('#importModal .modal-backdrop').onclick = closeImportModal;
+  $('#confirmImport').onclick = confirmImport;
+
+  // drag & drop
+  viewport.addEventListener('dragover', e=>{ e.preventDefault(); viewport.style.outline='2px dashed var(--green)';});
+  viewport.addEventListener('dragleave', ()=> viewport.style.outline='');
+  viewport.addEventListener('drop', e=>{
+    e.preventDefault(); viewport.style.outline='';
+    const file = e.dataTransfer.files[0];
+    if(file && file.type.startsWith('image/')) prepareImport(file);
+  });
+
+  // canvas events
+  overlayCanvas.addEventListener('pointerdown', onPointerDown);
+  overlayCanvas.addEventListener('pointermove', onPointerMove);
+  overlayCanvas.addEventListener('pointerup', onPointerUp);
+  overlayCanvas.addEventListener('pointerleave', onPointerLeave);
+  overlayCanvas.addEventListener('contextmenu', e=> e.preventDefault());
+
+  // export
+  $$('.bg-btn').forEach(b=>{
+    if(b.dataset.bg){
+      b.onclick = ()=>{
+        $$('[data-bg]').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+        state.exportBg = b.dataset.bg;
+        if(state.exportBg!=='transparent') $('#exportBgColor').value = state.exportBg;
+      };
+    }
+  });
+  $('#exportBgColor').oninput = e=>{
+    state.exportBg = e.target.value;
+    $$('[data-bg]').forEach(x=>x.classList.remove('active'));
+  };
+  $('#exportScale').onchange = e=> state.exportScale = parseInt(e.target.value);
+  $('#btnExportPng').onclick = ()=> exportPNG(false);
+  $('#btnExportPngBg').onclick = ()=> exportPNG(true);
+  $('#btnCopyPng').onclick = copyPNG;
+  $('#btnSaveProject').onclick = saveProjects;
+
+  // resize
+  $('#btnResizeCanvas').onclick = resizeCanvasFromInputs;
+  // wheel zoom
+  viewport.addEventListener('wheel', e=>{
+    if(e.ctrlKey || e.metaKey){
+      e.preventDefault();
+      setZoom(state.zoom + (e.deltaY>0?-2:2));
+    }
+  }, {passive:false});
+
+  // import modal preview etc.
+}
+
+function updatePixelCount(){
+  const w = parseInt($('#newW').value)||0;
+  const h = parseInt($('#newH').value)||0;
+  $('#pixelCount').textContent = w*h;
+  let hint = '';
+  if(w*h <=256) hint='иконка / курсор';
+  else if(w*h <=1024) hint='оптимально для спрайтов';
+  else if(w*h <=4096) hint='детальный арт';
+  else if(w*h <=16384) hint='постер / сцена';
+  else hint='огромная матрица — тяжело для браузера';
+  $('#sizeHint').textContent = hint;
+}
+
+// PROJECTS
+function loadProjects(){
+  try{
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if(!raw) return [];
+    const arr = JSON.parse(raw);
+    return Array.isArray(arr)?arr:[];
+  }catch{ return [];}
+}
+function saveProjects(){
+  // serialize activeProject layers to dataURL before save
+  if(activeProject){
+    // update layers canvases to data URLs in projects array
+    const idx = projects.findIndex(p=>p.id===activeProject.id);
+    if(idx>=0){
+      projects[idx] = serializeProject(activeProject);
+      // keep activeProject reference synced
+      activeProject = deserializeProject(projects[idx]); // keep canvases alive? Actually need to keep canvases
+      // but we just updated, we need to reassign canvases from activeProject to serialized then back?
+      // Instead keep activeProject canvases and just update projects[idx] data
+    }
+  }
+  // serialize all projects that may still have canvas objects
+  const toSave = projects.map(p=>{
+    if(p.layers && p.layers[0] && p.layers[0].canvas) return serializeProject(p);
+    return p;
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  toast('ПРОЕКТ СОХРАНЁН В ПАМЯТЬ');
+  renderGallery();
+}
+function serializeProject(proj){
+  return {
+    id: proj.id,
+    name: proj.name,
+    width: proj.width,
+    height: proj.height,
+    bg: proj.bg,
+    createdAt: proj.createdAt,
+    updatedAt: Date.now(),
+    layers: proj.layers.map(l=>({
+      id:l.id, name:l.name, visible:l.visible, opacity:l.opacity, offsetX:l.offsetX||0, offsetY:l.offsetY||0,
+      dataURL: l.canvas ? l.canvas.toDataURL() : l.dataURL
+    }))
+  };
+}
+function deserializeProject(raw){
+  const proj = {
+    id: raw.id, name: raw.name, width: raw.width, height: raw.height, bg: raw.bg,
+    createdAt: raw.createdAt, updatedAt: raw.updatedAt,
+    layers: []
+  };
+  raw.layers.forEach(ld=>{
+    const c = document.createElement('canvas');
+    c.width = proj.width; c.height = proj.height;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    if(ld.dataURL){
+      const img = new Image();
+      img.src = ld.dataURL;
+      // sync draw if already loaded? Need to handle async, but for our use we can draw after load
+      // Create promise-like: we will load synchronously via image decode
+      // For now if image not loaded, ctx will be empty but we try to draw after load
+      img.onload = ()=> { ctx.clearRect(0,0,c.width,c.height); ctx.drawImage(img,0,0); if(activeProject && activeProject.id===proj.id) composite(); renderLayers();};
+      // also try immediate if cached
+      if(img.complete) { ctx.drawImage(img,0,0); }
+    }
+    proj.layers.push({
+      id: ld.id, name: ld.name, visible: ld.visible, opacity: ld.opacity, offsetX: ld.offsetX||0, offsetY: ld.offsetY||0,
+      canvas: c, ctx: ctx, history: [], historyIndex: -1
+    });
+  });
+  return proj;
+}
+
+function uid(){ return Math.random().toString(36).slice(2,9) + Date.now().toString(36).slice(-4); }
+
+function openNewModal(){
+  $('#newProjectModal').style.display='grid';
+  $('#newProjectName').value = 'PIXEL_' + String(projects.length+1).padStart(2,'0');
+  updatePixelCount();
+  setTimeout(()=> $('#newProjectName').focus(), 50);
+}
+function closeNewModal(){ $('#newProjectModal').style.display='none'; }
+function createProject(){
+  const name = $('#newProjectName').value.trim() || 'Безымянный';
+  const w = Math.max(1, Math.min(512, parseInt($('#newW').value)||32));
+  const h = Math.max(1, Math.min(512, parseInt($('#newH').value)||32));
+  let bg = 'transparent';
+  const activeBg = document.querySelector('[data-bgmodal].active');
+  if(activeBg) bg = activeBg.dataset.bgmodal;
+  const customBg = $('#newBgColor').value;
+  if(bg==='transparent' && customBg) {} // keep transparent
+
+  const proj = {
+    id: uid(),
+    name, width:w, height:h, bg: bg,
+    createdAt: Date.now(), updatedAt: Date.now(),
+    layers: []
+  };
+  // create first layer
+  const layerCanvas = document.createElement('canvas');
+  layerCanvas.width = w; layerCanvas.height = h;
+  const ctx = layerCanvas.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  // if bg not transparent, fill layer 0 with bg? Actually background handled as export bg, but we can create bg layer
+  // For transparent, leave empty
+  // For solid bg choice, fill first layer with that color
+  if(bg!=='transparent'){
+    ctx.fillStyle = bg;
+    ctx.fillRect(0,0,w,h);
+  }
+  const layer = {
+    id: uid(), name: 'Слой 1', visible:true, opacity:100, offsetX:0, offsetY:0,
+    canvas: layerCanvas, ctx, history:[], historyIndex:-1
+  };
+  // push initial history
+  pushHistory(layer);
+  proj.layers.push(layer);
+
+  projects.unshift(proj);
+  saveProjectsImmediate();
+  closeNewModal();
+  openProject(proj.id);
+  toast(`МАТРИЦА ${w}×${h} СОЗДАНА`);
+}
+function saveProjectsImmediate(){
+  const toSave = projects.map(p=>{
+    if(p.layers && p.layers[0] && p.layers[0].canvas) return serializeProject(p);
+    return p;
+  });
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
+  renderGallery();
+}
+
+function renderGallery(){
+  let list = [...projects];
+  if(searchQuery) list = list.filter(p=> p.name.toLowerCase().includes(searchQuery));
+  if(sortMode==='new') list.sort((a,b)=> b.createdAt - a.createdAt);
+  else if(sortMode==='old') list.sort((a,b)=> a.createdAt - b.createdAt);
+  else if(sortMode==='name') list.sort((a,b)=> a.name.localeCompare(b.name));
+
+  projectsGrid.innerHTML = '';
+  if(list.length===0){
+    emptyState.style.display='block';
+    projectsGrid.style.display='none';
+  } else {
+    emptyState.style.display='none';
+    projectsGrid.style.display='grid';
+    list.forEach(proj=>{
+      const card = document.createElement('div');
+      card.className='project-card';
+      card.innerHTML = `
+        <div class="card-preview"><canvas width="${proj.width}" height="${proj.height}"></canvas></div>
+        <div class="card-meta">
+          <div>
+            <div class="card-title">${escapeHtml(proj.name)}</div>
+            <div class="card-sub">${proj.width} × ${proj.height} • ${proj.layers.length} слоёв • ${new Date(proj.createdAt).toLocaleDateString()}</div>
+          </div>
+        </div>
+        <div class="card-actions">
+          <button class="btn btn-primary btn-small open-btn">ОТКРЫТЬ</button>
+          <button class="btn btn-small dup-btn">⧉</button>
+          <button class="btn btn-small del-btn" style="color:var(--danger)">×</button>
+        </div>
+      `;
+      const cv = card.querySelector('canvas');
+      const ctx = cv.getContext('2d');
+      ctx.imageSmoothingEnabled=false;
+      // if layers have dataURL, draw composite thumbnail
+      // proj may be serialized with dataURL, not canvas
+      // we need to render thumbnail async
+      renderThumbnail(proj, cv);
+
+      card.querySelector('.open-btn').onclick = (e)=>{ e.stopPropagation(); openProject(proj.id); };
+      card.querySelector('.dup-btn').onclick = (e)=>{ e.stopPropagation(); duplicateProject(proj.id); };
+      card.querySelector('.del-btn').onclick = (e)=>{ e.stopPropagation(); deleteProject(proj.id); };
+      card.onclick = ()=> openProject(proj.id);
+      projectsGrid.appendChild(card);
+    });
+  }
+  updateHeaderStats();
+}
+function renderThumbnail(proj, canvas){
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width, canvas.height);
+  // draw checker
+  drawChecker(ctx, canvas.width, canvas.height, 4);
+  // draw each layer
+  let loaded = 0;
+  const layers = proj.layers;
+  if(!layers || layers.length===0) return;
+  layers.forEach(ld=>{
+    const img = new Image();
+    img.onload = ()=>{
+      ctx.globalAlpha = (ld.opacity??100)/100;
+      if(ld.visible!==false) ctx.drawImage(img, ld.offsetX||0, ld.offsetY||0);
+      ctx.globalAlpha=1;
+      loaded++;
+    };
+    img.src = ld.dataURL || (ld.canvas? ld.canvas.toDataURL() : '');
+  });
+}
+function drawChecker(ctx, w,h, size){
+  ctx.fillStyle='#0a0a0a';
+  ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='#141414';
+  for(let y=0;y<h;y++) for(let x=0;x<w;x++) if((x+y)%2===0){
+    // use size
+  }
+  // proper checker at pixel level
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      if((x+y)%2===0){
+        ctx.fillStyle='rgba(255,255,255,0.06)';
+        ctx.fillRect(x,y,1,1);
+      }
+    }
+  }
+}
+function escapeHtml(s){ return s.replace(/[&<>"']/g, c=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function updateHeaderStats(){
+  $('#headerStats').innerHTML = `<span class="blink">●</span> ПРОЕКТОВ: ${projects.length} • ПАМЯТЬ: ${Math.round(JSON.stringify(projects).length/1024)} KB`;
+}
+
+function duplicateProject(id){
+  const orig = projects.find(p=>p.id===id);
+  if(!orig) return;
+  const raw = serializeProject(orig.layers? orig : deserializeProject(orig));
+  // need to handle both serialized and live
+  let des;
+  if(orig.layers && orig.layers[0] && orig.layers[0].canvas){
+    // live
+    des = serializeProject(orig);
+  } else des = orig;
+  const copy = JSON.parse(JSON.stringify(des));
+  copy.id = uid();
+  copy.name = orig.name + ' копия';
+  copy.createdAt = Date.now();
+  copy.layers.forEach(l=> l.id = uid());
+  projects.unshift(copy);
+  saveProjectsImmediate();
+  toast('ПРОЕКТ ДУБЛИРОВАН');
+}
+function deleteProject(id){
+  if(!confirm('Удалить проект? Действие необратимо.')) return;
+  projects = projects.filter(p=>p.id!==id);
+  if(activeProject && activeProject.id===id) showGallery();
+  saveProjectsImmediate();
+  toast('ПРОЕКТ УДАЛЁН');
+}
+
+function showGallery(){
+  galleryView.style.display='block';
+  editorView.style.display='none';
+  $('#btnGallery').style.display='none';
+  $('#btnNewProject').style.display='inline-block';
+  $('#btnEditorBack').style.display='none';
+  renderGallery();
+}
+function openProject(id){
+  const raw = projects.find(p=>p.id===id);
+  if(!raw) return;
+  let proj;
+  if(raw.layers && raw.layers[0] && raw.layers[0].canvas){
+    proj = raw;
+  } else {
+    proj = deserializeProject(raw);
+    // replace in array with live version
+    const idx = projects.findIndex(p=>p.id===id);
+    projects[idx] = proj;
+  }
+  activeProject = proj;
+  activeLayerId = proj.layers[proj.layers.length-1]?.id || null;
+  galleryView.style.display='none';
+  editorView.style.display='block';
+  $('#btnGallery').style.display='inline-block';
+  $('#btnNewProject').style.display='none';
+  $('#btnEditorBack').style.display='inline-block';
+  // update canvas inputs
+  $('#canvasW').value = proj.width;
+  $('#canvasH').value = proj.height;
+  canvasSizeLabel.textContent = `${proj.width} × ${proj.height}`;
+  // ensure each layer has history
+  proj.layers.forEach(l=>{
+    if(!l.history) l.history=[];
+    if(l.history.length===0) pushHistory(l);
+  });
+  setupCanvases();
+  renderLayers();
+  composite();
+  setZoom( Math.max(4, Math.min(32, Math.floor(400 / Math.max(proj.width, proj.height)) * 4 )) );
+  toast(`ОТКРЫТ: ${proj.name} — ${proj.width}×${proj.height}`);
+}
+
+// CANVAS SETUP
+function setupCanvases(){
+  const w = activeProject.width, h = activeProject.height;
+  [mainCanvas, checkerCanvas, overlayCanvas].forEach(c=>{
+    c.width = w; c.height = h;
+    c.style.width = (w * state.zoom) + 'px';
+    c.style.height = (h * state.zoom) + 'px';
+  });
+  canvasStack.style.width = (w * state.zoom) + 'px';
+  canvasStack.style.height = (h * state.zoom) + 'px';
+  // checker
+  const cctx = checkerCanvas.getContext('2d');
+  cctx.imageSmoothingEnabled=false;
+  drawCheckerFull(cctx,w,h);
+  // main
+  const mctx = mainCanvas.getContext('2d');
+  mctx.imageSmoothingEnabled=false;
+  // overlay
+  const octx = overlayCanvas.getContext('2d');
+  octx.imageSmoothingEnabled=false;
+  // grid
+  updateGrid();
+}
+function drawCheckerFull(ctx,w,h){
+  const size = 1;
+  // dark bg
+  ctx.fillStyle='#050505';
+  ctx.fillRect(0,0,w,h);
+  for(let y=0;y<h;y++){
+    for(let x=0;x<w;x++){
+      if((x+y)%2===0){
+        ctx.fillStyle='#0f0f0f';
+        ctx.fillRect(x,y,1,1);
+      } else {
+        ctx.fillStyle='#0a0a0a';
+        ctx.fillRect(x,y,1,1);
+      }
+    }
+  }
+}
+function updateGrid(){
+  gridOverlay.innerHTML='';
+  if(!activeProject) return;
+  const w = activeProject.width, h = activeProject.height, z = state.zoom;
+  gridOverlay.style.width = (w*z)+'px';
+  gridOverlay.style.height = (h*z)+'px';
+  // create grid lines via CSS using box-shadow or canvas? Use div with background
+  gridOverlay.style.backgroundImage = `
+    linear-gradient(to right, rgba(0,255,65,0.12) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0,255,65,0.12) 1px, transparent 1px)
+  `;
+  gridOverlay.style.backgroundSize = `${z}px ${z}px`;
+}
+function setZoom(z){
+  state.zoom = Math.max(2, Math.min(48, z));
+  zoomLabel.textContent = (state.zoom*100/8).toFixed(0)+'%'; // 8px = 100%? Let's just show zoom
+  // Actually show like 200%, let's compute: base 1px = 6.25% ? Simpler show pixel size
+  zoomLabel.textContent = state.zoom + '×';
+  if(!activeProject) return;
+  [mainCanvas, checkerCanvas, overlayCanvas].forEach(c=>{
+    c.style.width = (activeProject.width * state.zoom) + 'px';
+    c.style.height = (activeProject.height * state.zoom) + 'px';
+  });
+  canvasStack.style.width = (activeProject.width * state.zoom) + 'px';
+  canvasStack.style.height = (activeProject.height * state.zoom) + 'px';
+  gridOverlay.style.width = (activeProject.width * state.zoom) + 'px';
+  gridOverlay.style.height = (activeProject.height * state.zoom) + 'px';
+  updateGrid();
+}
+function updateCursor(){
+  const map = {
+    pencil:'crosshair', eraser:'cell', fill:'pointer', picker:'copy', line:'crosshair', rect:'crosshair', circle:'crosshair', move:'move'
+  };
+  overlayCanvas.style.cursor = map[state.tool] || 'crosshair';
+}
+
+// LAYERS UI
+function renderLayers(){
+  if(!activeProject) return;
+  layersList.innerHTML='';
+  // render top to bottom (reverse)
+  const reversed = [...activeProject.layers].slice().reverse();
+  reversed.forEach((layer, idx)=>{
+    const actualIndex = activeProject.layers.length -1 - idx;
+    const div = document.createElement('div');
+    div.className='layer-item' + (layer.id===activeLayerId ? ' active':'');
+    div.draggable = true;
+    div.dataset.id = layer.id;
+    div.innerHTML = `
+      <div class="layer-thumb"><canvas width="${activeProject.width}" height="${activeProject.height}"></canvas></div>
+      <div class="layer-meta">
+        <div class="layer-name">${escapeHtml(layer.name)}</div>
+        <div class="layer-sub">${layer.offsetX||0},${layer.offsetY||0} • ${layer.opacity}%</div>
+      </div>
+      <div class="layer-controls-row">
+        <button class="icon-mini vis-btn ${layer.visible?'active':''}" title="Видимость">${layer.visible?'◉':'◎'}</button>
+        <button class="icon-mini lock-btn" title="Прозрачность">◐</button>
+      </div>
+    `;
+    // thumb draw
+    const tcanvas = div.querySelector('canvas');
+    const tctx = tcanvas.getContext('2d');
+    tctx.imageSmoothingEnabled=false;
+    // draw checker + layer
+    drawCheckerFull(tctx, activeProject.width, activeProject.height);
+    tctx.drawImage(layer.canvas, layer.offsetX||0, layer.offsetY||0);
+
+    // events
+    div.onclick = (e)=>{
+      if(e.target.closest('.vis-btn')) return;
+      setActiveLayer(layer.id);
+    };
+    div.ondblclick = ()=>{
+      const nameEl = div.querySelector('.layer-name');
+      const inp = document.createElement('input');
+      inp.value = layer.name;
+      nameEl.innerHTML='';
+      nameEl.appendChild(inp);
+      inp.focus();
+      inp.onblur = ()=>{
+        layer.name = inp.value.trim()||layer.name;
+        renderLayers();
+        saveProjectsImmediate();
+      };
+      inp.onkeydown = e=>{ if(e.key==='Enter') inp.blur(); };
+    };
+    // visibility
+    div.querySelector('.vis-btn').onclick = (e)=>{
+      e.stopPropagation();
+      layer.visible = !layer.visible;
+      renderLayers(); composite();
+      saveProjectsImmediate();
+    };
+    // opacity quick
+    div.querySelector('.lock-btn').onclick = (e)=>{
+      e.stopPropagation();
+      const v = prompt('Прозрачность слоя 0-100', layer.opacity);
+      if(v!==null){
+        let n = Math.max(0, Math.min(100, parseInt(v)||0));
+        layer.opacity = n;
+        renderLayers(); composite();
+        saveProjectsImmediate();
+      }
+    };
+
+    // drag reorder
+    div.addEventListener('dragstart', e=>{
+      e.dataTransfer.effectAllowed='move';
+      div.classList.add('dragging');
+      e.dataTransfer.setData('text/plain', layer.id);
+    });
+    div.addEventListener('dragend', ()=> div.classList.remove('dragging'));
+    div.addEventListener('dragover', e=>{
+      e.preventDefault();
+      div.style.outline='1px solid var(--green)';
+    });
+    div.addEventListener('dragleave', ()=> div.style.outline='');
+    div.addEventListener('drop', e=>{
+      e.preventDefault(); div.style.outline='';
+      const draggedId = e.dataTransfer.getData('text/plain');
+      if(draggedId===layer.id) return;
+      const fromIdx = activeProject.layers.findIndex(l=>l.id===draggedId);
+      const toIdx = activeProject.layers.findIndex(l=>l.id===layer.id);
+      if(fromIdx<0||toIdx<0) return;
+      const [dragged] = activeProject.layers.splice(fromIdx,1);
+      activeProject.layers.splice(toIdx,0,dragged);
+      renderLayers(); composite(); saveProjectsImmediate();
+    });
+
+    // opacity slider on hover? Add small range
+    const opacityRow = document.createElement('div');
+    opacityRow.style.cssText='grid-column:1 / -1; display:flex; gap:6px; align-items:center; margin-top:2px';
+    opacityRow.innerHTML = `<input type="range" min="0" max="100" value="${layer.opacity}" style="flex:1; accent-color:var(--green); height:4px"><span style="font-size:9px; color:var(--text-dim)">${layer.opacity}%</span>`;
+    const range = opacityRow.querySelector('input');
+    range.oninput = e=>{
+      layer.opacity = parseInt(e.target.value);
+      opacityRow.querySelector('span').textContent = layer.opacity+'%';
+      div.querySelector('.layer-sub').textContent = `${layer.offsetX||0},${layer.offsetY||0} • ${layer.opacity}%`;
+      composite();
+    };
+    range.onchange = ()=> saveProjectsImmediate();
+    div.appendChild(opacityRow);
+
+    // active styling
+    layersList.appendChild(div);
+  });
+  layersCount.textContent = activeProject.layers.length;
+  statusLayer.textContent = `СЛОЙ: ${activeProject.layers.findIndex(l=>l.id===activeLayerId)+1} / ${activeProject.layers.length}`;
+}
+function setActiveLayer(id){
+  activeLayerId = id;
+  renderLayers();
+  const layer = activeProject.layers.find(l=>l.id===id);
+  if(layer) statusLayer.textContent = `СЛОЙ: ${activeProject.layers.indexOf(layer)+1} — ${layer.name}`;
+}
+function getActiveLayer(){
+  return activeProject?.layers.find(l=>l.id===activeLayerId);
+}
+function addLayer(){
+  if(!activeProject) return;
+  const c = document.createElement('canvas');
+  c.width = activeProject.width; c.height = activeProject.height;
+  const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled=false;
+  const layer = { id:uid(), name:`Слой ${activeProject.layers.length+1}`, visible:true, opacity:100, offsetX:0, offsetY:0, canvas:c, ctx, history:[], historyIndex:-1 };
+  pushHistory(layer);
+  activeProject.layers.push(layer);
+  activeLayerId = layer.id;
+  renderLayers(); composite(); saveProjectsImmediate();
+  toast('СЛОЙ СОЗДАН');
+}
+function deleteLayer(){
+  if(!activeProject) return;
+  if(activeProject.layers.length<=1){ toast('НЕЛЬЗЯ УДАЛИТЬ ПОСЛЕДНИЙ СЛОЙ'); return; }
+  const idx = activeProject.layers.findIndex(l=>l.id===activeLayerId);
+  if(idx<0) return;
+  if(!confirm(`Удалить "${activeProject.layers[idx].name}"?`)) return;
+  activeProject.layers.splice(idx,1);
+  activeLayerId = activeProject.layers[Math.max(0, idx-1)].id;
+  renderLayers(); composite(); saveProjectsImmediate();
+  toast('СЛОЙ УДАЛЁН');
+}
+function duplicateLayer(){
+  const layer = getActiveLayer();
+  if(!layer) return;
+  const c = document.createElement('canvas');
+  c.width = activeProject.width; c.height = activeProject.height;
+  const ctx = c.getContext('2d'); ctx.imageSmoothingEnabled=false;
+  ctx.drawImage(layer.canvas,0,0);
+  const nl = { id:uid(), name: layer.name+' копия', visible:true, opacity:layer.opacity, offsetX:layer.offsetX, offsetY:layer.offsetY, canvas:c, ctx, history:[], historyIndex:-1 };
+  pushHistory(nl);
+  const idx = activeProject.layers.indexOf(layer);
+  activeProject.layers.splice(idx+1,0,nl);
+  activeLayerId = nl.id;
+  renderLayers(); composite(); saveProjectsImmediate();
+  toast('СЛОЙ ДУБЛИРОВАН');
+}
+function mergeDown(){
+  const idx = activeProject.layers.findIndex(l=>l.id===activeLayerId);
+  if(idx<=0){ toast('НИЖЕ НЕТ СЛОЯ ДЛЯ СЛИЯНИЯ'); return; }
+  const top = activeProject.layers[idx];
+  const bottom = activeProject.layers[idx-1];
+  pushHistory(bottom);
+  bottom.ctx.globalAlpha = (top.opacity/100);
+  bottom.ctx.drawImage(top.canvas, top.offsetX||0, top.offsetY||0);
+  bottom.ctx.globalAlpha=1;
+  // remove top
+  activeProject.layers.splice(idx,1);
+  activeLayerId = bottom.id;
+  renderLayers(); composite(); saveProjectsImmediate();
+  toast('СЛОИ ОБЪЕДИНЕНЫ');
+}
+function moveLayer(dir){
+  const idx = activeProject.layers.findIndex(l=>l.id===activeLayerId);
+  if(idx<0) return;
+  const newIdx = idx + dir;
+  if(newIdx<0 || newIdx>=activeProject.layers.length) return;
+  const tmp = activeProject.layers[idx];
+  activeProject.layers[idx]=activeProject.layers[newIdx];
+  activeProject.layers[newIdx]=tmp;
+  renderLayers(); composite(); saveProjectsImmediate();
+}
+function nudgeLayer(dx,dy){
+  const layer = getActiveLayer();
+  if(!layer) return;
+  layer.offsetX = (layer.offsetX||0)+dx;
+  layer.offsetY = (layer.offsetY||0)+dy;
+  composite(); renderLayers(); saveProjectsImmediate();
+}
+
+// HISTORY
+function pushHistory(layer){
+  // save imageData as dataURL to keep small
+  const data = layer.canvas.toDataURL();
+  // trim future
+  if(layer.historyIndex < layer.history.length-1) layer.history = layer.history.slice(0, layer.historyIndex+1);
+  layer.history.push(data);
+  layer.historyIndex = layer.history.length-1;
+  if(layer.history.length>30) { layer.history.shift(); layer.historyIndex--; }
+}
+function undo(){
+  const layer = getActiveLayer();
+  if(!layer || layer.historyIndex<=0){ toast('НЕЧЕГО ОТМЕНЯТЬ'); return; }
+  layer.historyIndex--;
+  restoreHistory(layer);
+}
+function redo(){
+  const layer = getActiveLayer();
+  if(!layer || layer.historyIndex>=layer.history.length-1){ toast('НЕЧЕГО ПОВТОРЯТЬ'); return; }
+  layer.historyIndex++;
+  restoreHistory(layer);
+}
+function restoreHistory(layer){
+  const dataURL = layer.history[layer.historyIndex];
+  const img = new Image();
+  img.onload = ()=>{
+    layer.ctx.clearRect(0,0,layer.canvas.width, layer.canvas.height);
+    layer.ctx.drawImage(img,0,0);
+    composite(); renderLayers();
+  };
+  img.src = dataURL;
+}
+function clearActiveLayer(){
+  const layer = getActiveLayer();
+  if(!layer) return;
+  if(!confirm('Очистить слой?')) return;
+  pushHistory(layer);
+  layer.ctx.clearRect(0,0,layer.canvas.width, layer.canvas.height);
+  composite(); renderLayers(); saveProjectsImmediate();
+}
+
+// PALETTE
+function renderPalette(){
+  paletteGrid.innerHTML='';
+  palette.forEach(col=>{
+    const cell = document.createElement('div');
+    cell.className='palette-cell';
+    cell.style.background = col;
+    if(col.toLowerCase()===state.colorPrimary.toLowerCase()) cell.classList.add('active');
+    cell.title = col;
+    cell.onclick = ()=>{
+      state.colorPrimary = col;
+      colorPicker.value = col;
+      colorHex.value = col.toUpperCase();
+      updateColorUI();
+      renderPalette();
+    };
+    cell.oncontextmenu = e=>{
+      e.preventDefault();
+      state.colorSecondary = col;
+      updateColorUI();
+    };
+    paletteGrid.appendChild(cell);
+  });
+}
+function updateColorUI(){
+  primarySwatch.style.background = state.colorPrimary;
+  secondarySwatch.style.background = state.colorSecondary;
+  statusColor.textContent = `ЦВЕТ: ${state.colorPrimary.toUpperCase()}`;
+  colorPicker.value = state.colorPrimary;
+  colorHex.value = state.colorPrimary.toUpperCase();
+}
+
+// DRAWING
+function getPos(e){
+  const rect = overlayCanvas.getBoundingClientRect();
+  const scaleX = overlayCanvas.width / rect.width;
+  const scaleY = overlayCanvas.height / rect.height;
+  const x = Math.floor((e.clientX - rect.left) * scaleX);
+  const y = Math.floor((e.clientY - rect.top) * scaleY);
+  return {x,y};
+}
+function onPointerDown(e){
+  if(!activeProject) return;
+  overlayCanvas.setPointerCapture(e.pointerId);
+  state.isDrawing = true;
+  const pos = getPos(e);
+  state.startPos = {...pos};
+  state.lastPos = {...pos};
+
+  const layer = getActiveLayer();
+  if(!layer) return;
+
+  if(state.tool==='picker'){
+    pickColor(pos);
+    state.isDrawing=false;
+    return;
+  }
+  if(state.tool==='fill'){
+    pushHistory(layer);
+    floodFill(layer, pos.x, pos.y, state.colorPrimary);
+    composite(); renderLayers(); saveProjectsImmediate();
+    state.isDrawing=false;
+    return;
+  }
+  if(state.tool==='move'){
+    // start drag offset
+    state.moveStart = {x:pos.x, y:pos.y, ox:layer.offsetX||0, oy:layer.offsetY||0};
+    return;
+  }
+  // for pencil/eraser/line/rect/circle push history
+  pushHistory(layer);
+  if(state.tool==='pencil' || state.tool==='eraser'){
+    drawBrush(layer, pos, pos);
+  }
+  // for shape tools, will draw preview on overlay
+  e.preventDefault();
+}
+function onPointerMove(e){
+  if(!activeProject) return;
+  const pos = getPos(e);
+  coordsLabel.textContent = `X: ${pos.x} Y: ${pos.y}`;
+  const layer = getActiveLayer();
+  if(!layer) return;
+
+  if(state.tool==='move' && state.isDrawing){
+    const dx = pos.x - state.moveStart.x;
+    const dy = pos.y - state.moveStart.y;
+    layer.offsetX = state.moveStart.ox + dx;
+    layer.offsetY = state.moveStart.oy + dy;
+    composite(); renderLayers();
+    return;
+  }
+
+  if(!state.isDrawing) {
+    // preview cursor?
+    if(state.tool==='pencil' || state.tool==='eraser'){
+      // show brush preview on overlay
+      drawOverlayPreview(pos);
+    }
+    return;
+  }
+
+  if(state.tool==='pencil' || state.tool==='eraser'){
+    drawBrush(layer, state.lastPos, pos);
+    state.lastPos = {...pos};
+  } else if(['line','rect','circle'].includes(state.tool)){
+    drawOverlayPreviewShape(state.startPos, pos);
+  }
+}
+function onPointerUp(e){
+  if(!state.isDrawing) return;
+  state.isDrawing=false;
+  const pos = getPos(e);
+  const layer = getActiveLayer();
+  if(!layer) return;
+
+  if(['line','rect','circle'].includes(state.tool)){
+    // commit shape
+    clearOverlay();
+    drawShape(layer, state.startPos, pos, state.tool);
+    composite(); renderLayers(); saveProjectsImmediate();
+  } else if(state.tool==='pencil' || state.tool==='eraser'){
+    composite(); renderLayers(); saveProjectsImmediate();
+  } else if(state.tool==='move'){
+    composite(); renderLayers(); saveProjectsImmediate();
+  }
+  state.startPos=null;
+  state.lastPos=null;
+}
+function onPointerLeave(){
+  coordsLabel.textContent = `X: -- Y: --`;
+  if(!state.isDrawing) clearOverlay();
+}
+
+function drawOverlayPreview(pos){
+  const octx = overlayCanvas.getContext('2d');
+  clearOverlay();
+  octx.fillStyle = state.tool==='eraser' ? 'rgba(255,0,0,0.3)' : hexToRgba(state.colorPrimary, 0.4);
+  const s = state.brushSize;
+  const half = Math.floor(s/2);
+  octx.fillRect(pos.x - half, pos.y - half, s, s);
+}
+function drawOverlayPreviewShape(a,b){
+  const octx = overlayCanvas.getContext('2d');
+  clearOverlay();
+  octx.strokeStyle = hexToRgba(state.colorPrimary, 0.9);
+  octx.fillStyle = hexToRgba(state.colorPrimary, 0.3);
+  octx.lineWidth = 1;
+  if(state.tool==='line'){
+    octx.beginPath(); octx.moveTo(a.x+0.5, a.y+0.5); octx.lineTo(b.x+0.5, b.y+0.5); octx.stroke();
+  } else if(state.tool==='rect'){
+    const x=Math.min(a.x,b.x), y=Math.min(a.y,b.y), w=Math.abs(b.x-a.x)+1, h=Math.abs(b.y-a.y)+1;
+    octx.strokeRect(x+0.5,y+0.5,w-1,h-1);
+  } else if(state.tool==='circle'){
+    const cx=(a.x+b.x)/2, cy=(a.y+b.y)/2, rx=Math.abs(b.x-a.x)/2, ry=Math.abs(b.y-a.y)/2;
+    octx.beginPath(); octx.ellipse(cx+0.5, cy+0.5, rx, ry, 0,0,Math.PI*2); octx.stroke();
+  }
+}
+function clearOverlay(){
+  const octx = overlayCanvas.getContext('2d');
+  octx.clearRect(0,0,overlayCanvas.width, overlayCanvas.height);
+}
+
+function drawBrush(layer, from, to){
+  const ctx = layer.ctx;
+  ctx.imageSmoothingEnabled=false;
+  const isEraser = state.tool==='eraser';
+  const size = state.brushSize;
+  const half = Math.floor(size/2);
+  const alpha = state.brushOpacity/100;
+
+  // if eraser, use destination-out
+  // For pixel perfect, draw line via Bresenham
+  const points = bresenham(from.x, from.y, to.x, to.y);
+  ctx.globalAlpha = alpha;
+  if(isEraser){
+    ctx.globalCompositeOperation='destination-out';
+    ctx.fillStyle='rgba(0,0,0,1)';
+  } else {
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle=state.colorPrimary;
+  }
+
+  // To handle opacity per pixel, globalAlpha works
+  points.forEach(p=>{
+    // brush size
+    for(let dy=0; dy<size; dy++){
+      for(let dx=0; dx<size; dx++){
+        const x = p.x - half + dx;
+        const y = p.y - half + dy;
+        if(x<0||y<0||x>=layer.canvas.width||y>=layer.canvas.height) continue;
+        // perfect pixel: skip if needed? Simplified ignore
+        ctx.fillRect(x,y,1,1);
+        if(state.mirrorX){
+          const mx = layer.canvas.width -1 - x;
+          ctx.fillRect(mx,y,1,1);
+        }
+        if(state.mirrorY){
+          const my = layer.canvas.height -1 - y;
+          ctx.fillRect(x,my,1,1);
+        }
+        if(state.mirrorX && state.mirrorY){
+          const mx = layer.canvas.width -1 - x;
+          const my = layer.canvas.height -1 - y;
+          ctx.fillRect(mx,my,1,1);
+        }
+      }
+    }
+  });
+  ctx.globalAlpha=1;
+  ctx.globalCompositeOperation='source-over';
+  composite();
+}
+function bresenham(x0,y0,x1,y1){
+  const pts=[];
+  let dx=Math.abs(x1-x0), dy=Math.abs(y1-y0), sx=x0<x1?1:-1, sy=y0<y1?1:-1, err=dx-dy;
+  while(true){
+    pts.push({x:x0,y:y0});
+    if(x0===x1 && y0===y1) break;
+    let e2=err*2;
+    if(e2>-dy){ err-=dy; x0+=sx; }
+    if(e2<dx){ err+=dx; y0+=sy; }
+  }
+  return pts;
+}
+function drawShape(layer, a,b, type){
+  const ctx = layer.ctx;
+  ctx.imageSmoothingEnabled=false;
+  ctx.fillStyle = state.colorPrimary;
+  ctx.strokeStyle = state.colorPrimary;
+  ctx.globalAlpha = state.brushOpacity/100;
+  if(type==='line'){
+    // thick line via brush points
+    drawBrush(layer, a,b);
+    ctx.globalAlpha=1;
+    return;
+  } else if(type==='rect'){
+    const x=Math.min(a.x,b.x), y=Math.min(a.y,b.y), w=Math.abs(b.x-a.x)+1, h=Math.abs(b.y-a.y)+1;
+    // filled rect with brush opacity? Do outline if holding shift? For now filled with border 1px
+    // Use fillRect for pixel rect
+    // If brushSize >1, use stroke?
+    // Simple: filled rect with 1px border inside
+    ctx.fillRect(x,y,w,1);
+    ctx.fillRect(x,y+h-1,w,1);
+    ctx.fillRect(x,y,1,h);
+    ctx.fillRect(x+w-1,y,1,h);
+    // if wants fill, user can use fill tool; rect is outline
+  } else if(type==='circle'){
+    const cx=(a.x+b.x)/2, cy=(a.y+b.y)/2, rx=Math.abs(b.x-a.x)/2, ry=Math.abs(b.y-a.y)/2;
+    // pixel circle via midpoint - approximate with ellipse stroke
+    // Use manual pixel ellipse
+    const steps= Math.max( Math.abs(b.x-a.x), Math.abs(b.y-a.y))*2;
+    for(let i=0;i<steps;i++){
+      const ang = (i/steps)*Math.PI*2;
+      const x = Math.round(cx + Math.cos(ang)*rx);
+      const y = Math.round(cy + Math.sin(ang)*ry);
+      ctx.fillRect(x,y,1,1);
+    }
+  }
+  ctx.globalAlpha=1;
+  composite();
+}
+function floodFill(layer, sx,sy, fillColor){
+  const w = layer.canvas.width, h = layer.canvas.height;
+  if(sx<0||sy<0||sx>=w||sy>=h) return;
+  const ctx = layer.ctx;
+  const imgData = ctx.getImageData(0,0,w,h);
+  const data = imgData.data;
+  const stack = [[sx,sy]];
+  const startIdx = (sy*w+sx)*4;
+  const sr=data[startIdx], sg=data[startIdx+1], sb=data[startIdx+2], sa=data[startIdx+3];
+  const fillRgba = hexToRgbaArr(fillColor);
+  const fillA = Math.round((state.brushOpacity/100)*255);
+  // if same color, no op
+  if(sr===fillRgba[0] && sg===fillRgba[1] && sb===fillRgba[2] && sa===fillA) return;
+  // tolerance? perfect
+  const visited = new Uint8Array(w*h);
+  while(stack.length){
+    const [x,y]=stack.pop();
+    if(x<0||y<0||x>=w||y>=h) continue;
+    const idx = y*w+x;
+    if(visited[idx]) continue;
+    visited[idx]=1;
+    const i=idx*4;
+    if(data[i]!==sr || data[i+1]!==sg || data[i+2]!==sb || data[i+3]!==sa) continue;
+    data[i]=fillRgba[0]; data[i+1]=fillRgba[1]; data[i+2]=fillRgba[2]; data[i+3]=fillA;
+    stack.push([x+1,y],[x-1,y],[x,y+1],[x,y-1]);
+  }
+  ctx.putImageData(imgData,0,0);
+  // mirror fill? ignore
+}
+function hexToRgba(hex, a){
+  const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+  return `rgba(${r},${g},${b},${a})`;
+}
+function hexToRgbaArr(hex){
+  return [parseInt(hex.slice(1,3),16), parseInt(hex.slice(3,5),16), parseInt(hex.slice(5,7),16), 255];
+}
+function pickColor(pos){
+  // composite visible? For picker we need actual pixel under cursor from composite or active layer?
+  // Use active layer's pixel first, fallback to composite
+  const layer = getActiveLayer();
+  if(!layer) return;
+  // get from composite: create temp composite canvas
+  const w=activeProject.width, h=activeProject.height;
+  const tmp = document.createElement('canvas');
+  tmp.width=w; tmp.height=h;
+  const tctx=tmp.getContext('2d');
+  activeProject.layers.forEach(l=>{
+    if(!l.visible) return;
+    tctx.globalAlpha = l.opacity/100;
+    tctx.drawImage(l.canvas, l.offsetX||0, l.offsetY||0);
+  });
+  const d = tctx.getImageData(pos.x,pos.y,1,1).data;
+  if(d[3]===0){ toast('ПРОЗРАЧНЫЙ ПИКСЕЛЬ'); return;}
+  const hex = '#' + [d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join('');
+  state.colorPrimary = hex;
+  colorPicker.value = hex;
+  colorHex.value = hex.toUpperCase();
+  updateColorUI(); renderPalette();
+  toast(`ЦВЕТ ПИПЕТКОЙ: ${hex.toUpperCase()}`);
+}
+
+// COMPOSITE
+function composite(){
+  if(!activeProject) return;
+  const mctx = mainCanvas.getContext('2d');
+  mctx.imageSmoothingEnabled=false;
+  mctx.clearRect(0,0,mainCanvas.width, mainCanvas.height);
+  // draw each visible layer
+  activeProject.layers.forEach(l=>{
+    if(!l.visible) return;
+    mctx.globalAlpha = l.opacity/100;
+    mctx.drawImage(l.canvas, l.offsetX||0, l.offsetY||0);
+  });
+  mctx.globalAlpha=1;
+
+  // onion skin? If enabled, show previous layer ghost
+  if($('#toggleOnion').checked){
+    // simple: draw previous layer with low alpha underneath?
+  }
+}
+
+// EXPORT
+function exportPNG(withBg){
+  if(!activeProject) return;
+  const scale = state.exportScale;
+  const w = activeProject.width * scale;
+  const h = activeProject.height * scale;
+  const out = document.createElement('canvas');
+  out.width=w; out.height=h;
+  const octx = out.getContext('2d');
+  octx.imageSmoothingEnabled=false;
+  // bg
+  let bg = state.exportBg;
+  if(withBg && bg==='transparent') bg = '#0a1f0a';
+  if(!withBg) bg='transparent';
+  // if bg is transparent, leave, else fill
+  if(bg!=='transparent'){
+    octx.fillStyle=bg;
+    octx.fillRect(0,0,w,h);
+  }
+  // draw layers scaled
+  activeProject.layers.forEach(l=>{
+    if(!l.visible) return;
+    octx.globalAlpha = l.opacity/100;
+    // need to draw layer canvas scaled + offset*scale
+    octx.drawImage(l.canvas, (l.offsetX||0)*scale, (l.offsetY||0)*scale, activeProject.width*scale, activeProject.height*scale);
+  });
+  octx.globalAlpha=1;
+
+  const a = document.createElement('a');
+  const suffix = withBg ? '_with_bg' : '';
+  a.download = `${activeProject.name.replace(/\s+/g,'_')}_${activeProject.width}x${activeProject.height}${suffix}.png`;
+  a.href = out.toDataURL('image/png');
+  a.click();
+  toast(`СКАЧАНО PNG ${w}×${h} ${bg==='transparent'?'БЕЗ ФОНА':'С ФОНОМ'}`);
+}
+async function copyPNG(){
+  if(!activeProject) return;
+  const scale = state.exportScale;
+  const w = activeProject.width * scale, h = activeProject.height * scale;
+  const out = document.createElement('canvas');
+  out.width=w; out.height=h;
+  const octx=out.getContext('2d');
+  octx.imageSmoothingEnabled=false;
+  if(state.exportBg!=='transparent'){
+    octx.fillStyle=state.exportBg; octx.fillRect(0,0,w,h);
+  }
+  activeProject.layers.forEach(l=>{
+    if(!l.visible) return;
+    octx.globalAlpha=l.opacity/100;
+    octx.drawImage(l.canvas, (l.offsetX||0)*scale, (l.offsetY||0)*scale, activeProject.width*scale, activeProject.height*scale);
+  });
+  out.toBlob(async blob=>{
+    try{
+      await navigator.clipboard.write([new ClipboardItem({'image/png': blob})]);
+      toast('СКОПИРОВАНО В БУФЕР');
+    }catch{
+      toast('НЕ УДАЛОСЬ СКОПИРОВАТЬ — СКАЧАЙ ФАЙЛОМ');
+    }
+  });
+}
+
+// IMPORT
+let pendingImportFile = null;
+let pendingImportURL = null;
+function handleImportFile(e){
+  const file = e.target.files[0];
+  if(!file) return;
+  prepareImport(file);
+  e.target.value='';
+}
+function prepareImport(file){
+  pendingImportFile = file;
+  const url = URL.createObjectURL(file);
+  pendingImportURL = url;
+  $('#importPreview').src = url;
+  $('#importModal').style.display='grid';
+}
+function closeImportModal(){
+  $('#importModal').style.display='none';
+  if(pendingImportURL) URL.revokeObjectURL(pendingImportURL);
+  pendingImportFile=null; pendingImportURL=null;
+}
+function confirmImport(){
+  if(!pendingImportFile || !activeProject) return;
+  const mode = $('#importMode').value;
+  const asNew = $('#importAsNewLayer').checked;
+  const img = new Image();
+  img.onload = ()=>{
+    let targetLayer;
+    if(asNew){
+      const c = document.createElement('canvas');
+      c.width=activeProject.width; c.height=activeProject.height;
+      const ctx=c.getContext('2d'); ctx.imageSmoothingEnabled=false;
+      // draw according to mode
+      if(mode==='stretch'){
+        ctx.drawImage(img,0,0,activeProject.width, activeProject.height);
+      } else if(mode==='fit'){
+        const scale = Math.min(activeProject.width/img.width, activeProject.height/img.height);
+        const w=img.width*scale, h=img.height*scale;
+        const x=(activeProject.width-w)/2, y=(activeProject.height-h)/2;
+        ctx.drawImage(img,x,y,w,h);
+      } else if(mode==='center'){
+        const x=(activeProject.width-img.width)/2, y=(activeProject.height-img.height)/2;
+        ctx.drawImage(img,x,y);
+      } else if(mode==='pixelize'){
+        // pixelize: draw to small then scale up with no smoothing, also reduce colors
+        // draw stretched but with imageSmoothing false it's already pixelated
+        ctx.imageSmoothingEnabled=false;
+        ctx.drawImage(img,0,0,activeProject.width, activeProject.height);
+        // optional posterize: reduce colors to 16
+        // we could quantize
+      }
+      const layer = {id:uid(), name:'Импорт '+pendingImportFile.name.slice(0,12), visible:true, opacity:100, offsetX:0, offsetY:0, canvas:c, ctx, history:[], historyIndex:-1};
+      pushHistory(layer);
+      activeProject.layers.push(layer);
+      activeLayerId=layer.id;
+    } else {
+      const layer = getActiveLayer();
+      if(!layer) return;
+      pushHistory(layer);
+      // draw onto active layer
+      if(mode==='stretch') layer.ctx.drawImage(img,0,0,activeProject.width, activeProject.height);
+      else if(mode==='fit'){
+        const scale = Math.min(activeProject.width/img.width, activeProject.height/img.height);
+        const w=img.width*scale, h=img.height*scale;
+        const x=(activeProject.width-w)/2, y=(activeProject.height-h)/2;
+        layer.ctx.drawImage(img,x,y,w,h);
+      } else if(mode==='center'){
+        const x=(activeProject.width-img.width)/2, y=(activeProject.height-img.height)/2;
+        layer.ctx.drawImage(img,x,y);
+      } else if(mode==='pixelize'){
+        layer.ctx.drawImage(img,0,0,activeProject.width, activeProject.height);
+      }
+    }
+    composite(); renderLayers(); saveProjectsImmediate();
+    closeImportModal();
+    toast('ИЗОБРАЖЕНИЕ ИМПОРТИРОВАНО');
+  };
+  img.src = pendingImportURL;
+}
+
+// RESIZE
+function resizeCanvasFromInputs(){
+  const w = Math.max(1, Math.min(512, parseInt($('#canvasW').value)||activeProject.width));
+  const h = Math.max(1, Math.min(512, parseInt($('#canvasH').value)||activeProject.height));
+  if(w===activeProject.width && h===activeProject.height) return;
+  if(!confirm(`Изменить размер холста на ${w}×${h}? Пиксели обрежутся/расширятся.`)) return;
+  // resize each layer canvas
+  activeProject.layers.forEach(l=>{
+    pushHistory(l);
+    const nc = document.createElement('canvas');
+    nc.width=w; nc.height=h;
+    const nctx=nc.getContext('2d'); nctx.imageSmoothingEnabled=false;
+    // draw old onto new at 0,0
+    nctx.drawImage(l.canvas,0,0);
+    l.canvas=nc; l.ctx=nctx;
+  });
+  activeProject.width=w; activeProject.height=h;
+  canvasSizeLabel.textContent=`${w} × ${h}`;
+  setupCanvases(); renderLayers(); composite(); saveProjectsImmediate();
+  toast(`ХОЛСТ ИЗМЕНЁН: ${w}×${h}`);
+}
+
+// KEYBOARD
+function onKeyDown(e){
+  if($('#newProjectModal').style.display!=='none' || $('#importModal').style.display!=='none'){
+    if(e.key==='Escape'){ closeNewModal(); closeImportModal(); }
+    if(e.key==='Enter' && $('#newProjectModal').style.display!=='none'){ createProject(); }
+    return;
+  }
+  if(!activeProject || galleryView.style.display!=='none') return;
+  const mod = e.ctrlKey || e.metaKey;
+  if(mod && e.key.toLowerCase()==='z'){ e.preventDefault(); if(e.shiftKey) redo(); else undo(); }
+  else if(mod && e.key.toLowerCase()==='y'){ e.preventDefault(); redo(); }
+  else if(mod && e.key.toLowerCase()==='s'){ e.preventDefault(); saveProjects(); }
+  else if(e.key==='b' || e.key==='B' || e.key==='и'){ setTool('pencil'); }
+  else if(e.key==='e' || e.key==='у'){ setTool('eraser'); }
+  else if(e.key==='g' || e.key==='п'){ setTool('fill'); }
+  else if(e.key==='i' || e.key==='ш'){ setTool('picker'); }
+  else if(e.key==='v' || e.key==='м'){ setTool('move'); }
+  else if(e.key==='x' || e.key==='ч'){ // swap colors
+    let tmp=state.colorPrimary; state.colorPrimary=state.colorSecondary; state.colorSecondary=tmp;
+    colorPicker.value=state.colorPrimary; colorHex.value=state.colorPrimary.toUpperCase(); updateColorUI();
+  } else if(e.key==='['){ setBrushSize(state.brushSize-1); }
+  else if(e.key===']'){ setBrushSize(state.brushSize+1); }
+  else if(e.key==='ArrowUp' || e.key==='ArrowDown' || e.key==='ArrowLeft' || e.key==='ArrowRight'){
+    e.preventDefault();
+    const step = e.shiftKey? 10:1;
+    const map = {ArrowUp:[0,-step], ArrowDown:[0,step], ArrowLeft:[-step,0], ArrowRight:[step,0]};
+    const [dx,dy]=map[e.key];
+    nudgeLayer(dx,dy);
+  } else if(e.key==='Delete' || e.key==='Backspace'){
+    if(e.target.tagName!=='INPUT') clearActiveLayer();
+  }
+}
+function setTool(t){
+  state.tool=t;
+  $$('.tool-btn').forEach(b=> b.classList.toggle('active', b.dataset.tool===t));
+  statusTool.textContent='ИНСТРУМЕНТ: '+t.toUpperCase();
+  updateCursor();
+}
+function setBrushSize(s){
+  state.brushSize = Math.max(1, Math.min(4, s));
+  $$('.brush-btn').forEach(b=> b.classList.toggle('active', parseInt(b.dataset.size)===state.brushSize));
+}
+
+// TOAST
+function toast(msg){
+  const t=document.createElement('div');
+  t.className='toast'; t.textContent='> '+msg;
+  $('#toast').appendChild(t);
+  setTimeout(()=>{ t.style.opacity='0'; t.style.transform='translateY(6px)'; setTimeout(()=> t.remove(),300); },2200);
+}
+
+// INIT DEMO PROJECTS IF EMPTY
+if(projects.length===0){
+  // create demo empty? Leave emptyState
+}
+
+
+</script>
+</body>
+</html>
