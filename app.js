@@ -287,7 +287,128 @@ function updatePixelCount(){
   else if(w*h <=4096) hint='детальный арт';
   else if(w*h <=16384) hint='постер / сцена';
   else hint='огромная матрица — тяжело для браузера';
-  $('#sizeHint').textContent = hint;
+  const hintEl = $('#sizeHint');
+  if(hintEl) hintEl.textContent = hint;
+  updateSizePreview();
+}
+function updateSizePreview(){
+  const wEl = $('#newW'), hEl = $('#newH');
+  if(!wEl || !hEl) return;
+  const w = Math.max(1, Math.min(512, parseInt(wEl.value)||1));
+  const h = Math.max(1, Math.min(512, parseInt(hEl.value)||1));
+  const dims = $('#previewDims');
+  const wLab = $('#previewWLabel');
+  const hLab = $('#previewHLabel');
+  const pixEl = $('#previewPixels');
+  const ratioEl = $('#previewRatio');
+  const sizeEl = $('#previewSizeKB');
+  const fillEl = $('#previewCompareFill');
+  const textEl = $('#previewCompareText');
+  const centerEl = $('#previewCenterLabel');
+  if(dims) dims.textContent = w + ' × ' + h;
+  if(wLab) wLab.textContent = w + ' px';
+  if(hLab) hLab.textContent = h + ' px';
+  if(pixEl) pixEl.innerHTML = '<b>' + (w*h).toLocaleString('ru-RU') + '</b> пикселей';
+  if(ratioEl){
+    let t='';
+    if(w===h) t='<b>1:1</b> квадрат';
+    else if(w>h) t='<b>' + (w/h).toFixed(1) + ':1</b> альбом';
+    else t='<b>1:' + (h/w).toFixed(1) + '</b> портрет';
+    ratioEl.innerHTML = t;
+  }
+  if(sizeEl){
+    const kb = Math.max(1, Math.round(w*h*4/1024));
+    let s = kb >= 1024 ? (kb/1024).toFixed(1)+' MB' : kb + ' KB';
+    sizeEl.innerHTML = '<b>' + s + '</b>';
+  }
+  // compare bar: how big vs 32×32 reference
+  if(fillEl){
+    const ref = 32*32;
+    const cur = w*h;
+    const pct = Math.min(100, Math.max(4, Math.round(cur / ref * 50)));
+    // for visual: 32×32 = 50%, so smaller <50, larger >50
+    // but clamp to show proportion
+    let widthPct = Math.min(100, Math.max(2, (Math.log(cur+1)/Math.log(512*512))*100));
+    // alternative linear for small sizes better: use ref
+    // we use log scale for better visual
+    fillEl.style.width = Math.round(widthPct) + '%';
+  }
+  if(textEl){
+    const ref = 1024;
+    if(w*h === ref) textEl.textContent = 'как 32×32';
+    else if(w*h < ref) textEl.textContent = 'в ' + (ref/(w*h)).toFixed(1) + '× меньше 32×32';
+    else textEl.textContent = 'в ' + (w*h/ref).toFixed(1) + '× больше 32×32';
+  }
+  if(centerEl) centerEl.textContent = w + '×' + h;
+  const rect = $('#previewRect');
+  const canvas = $('#previewCanvas');
+  const stage = $('#previewStage');
+  if(rect && canvas && stage){
+    const maxW = Math.min(220, stage.clientWidth - 28);
+    const maxH = 150;
+    // scale to fit stage with padding, keep crisp
+    const scale = Math.min(maxW / w, maxH / h, 12);
+    const s = Math.max(1, Math.floor(scale));
+    // use actual scale for rect size, but keep integer for crisp
+    const pw = w * s;
+    const ph = h * s;
+    rect.style.width = pw + 'px';
+    rect.style.height = ph + 'px';
+    canvas.width = w;
+    canvas.height = h;
+    canvas.style.width = pw + 'px';
+    canvas.style.height = ph + 'px';
+    const ctx = canvas.getContext('2d');
+    if(ctx){
+      ctx.imageSmoothingEnabled = false;
+      // bg
+      ctx.fillStyle = '#020802';
+      ctx.fillRect(0,0,w,h);
+      // subtle checker for large canvases
+      if(w*h > 256){
+        ctx.fillStyle = 'rgba(0,255,65,0.04)';
+        for(let y=0;y<h;y++) for(let x=0;x<w;x++) if((x+y)%2===0) ctx.fillRect(x,y,1,1);
+      }
+      // demo pattern: green phosphor example - border + cross + center
+      ctx.fillStyle = '#00ff41';
+      // border 1px
+      ctx.fillRect(0,0,w,1);
+      ctx.fillRect(0,h-1,w,1);
+      ctx.fillRect(0,0,1,h);
+      ctx.fillRect(w-1,0,1,h);
+      // diagonals / guide
+      for(let i=0;i<Math.min(w,h); i+=2){
+        // make pattern visible only if not too tiny
+        if(w>=8 && h>=8){
+          ctx.fillRect(i,i,1,1);
+          ctx.fillRect(w-1-i,i,1,1);
+        }
+      }
+      if(w>10 && h>10){
+        ctx.fillStyle = 'rgba(0,255,65,0.85)';
+        const cx = Math.floor(w/2), cy = Math.floor(h/2);
+        const r = Math.min(3, Math.floor(Math.min(w,h)/6));
+        // small cross in center
+        ctx.fillRect(cx, cy, 1, 1);
+        if(r>=1){
+          ctx.fillRect(cx-1,cy,1,1);
+          ctx.fillRect(cx+1,cy,1,1);
+          ctx.fillRect(cx,cy-1,1,1);
+          ctx.fillRect(cx,cy+1,1,1);
+        }
+      }
+      // show pixel grid dots if scale >=6 and size small
+      if(s >= 6 && w<=64 && h<=64){
+        ctx.fillStyle = 'rgba(0,255,65,0.12)';
+        for(let y=0;y<h;y++) for(let x=0;x<w;x++){
+          if(x%1===0 && y%1===0){
+            // grid point already border, add faint interior grid by stroking every pixel? already checker
+          }
+        }
+      }
+    }
+  }
+  // update little bars for width/height visual ratio?
 }
 
 // PROJECTS
@@ -371,6 +492,7 @@ function openNewModal(){
   $('#newProjectModal').style.display='grid';
   $('#newProjectName').value = 'PIXEL_' + String(projects.length+1).padStart(2,'0');
   updatePixelCount();
+  setTimeout(updateSizePreview, 30);
   setTimeout(()=> $('#newProjectName').focus(), 50);
 }
 function closeNewModal(){ $('#newProjectModal').style.display='none'; }
