@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PIXEL.CRT — Зелёный терминал пиксель-арта</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=VT323&family=Share+Tech+Mono&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div class="scanlines"></div>
+<div class="flicker"></div>
+<div class="vignette"></div>
+
+<header class="header">
+  <div class="header-left">
+    <div class="logo">
+      <div class="logo-icon">█▓▒░</div>
+      <div class="logo-text">
+        <h1>PIXEL.CRT</h1>
+        <span>ЗЕЛЁНЫЙ ТЕРМИНАЛ v1.0 //  phosphor display</span>
+      </div>
+    </div>
+    <div class="header-stats" id="headerStats">
+      <span class="blink">●</span> СИСТЕМА ГОТОВА
+    </div>
+  </div>
+  <div class="header-right">
+    <button class="btn btn-ghost" id="btnGallery">◰ ПРОЕКТЫ</button>
+    <button class="btn btn-primary" id="btnNewProject">+ НОВЫЙ ПРОЕКТ</button>
+    <button class="btn btn-ghost" id="btnEditorBack" style="display:none">← НАЗАД</button>
+  </div>
+</header>
+
+<!-- GALLERY VIEW -->
+<main id="galleryView" class="view">
+  <section class="gallery-hero">
+    <div class="hero-terminal">
+      <div class="terminal-bar">
+        <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
+        <span class="term-title">/home/pixel/projects — phosphor_os</span>
+        <span class="term-ops">[ ░▒▓ █ ]</span>
+      </div>
+      <div class="hero-content">
+        <h2>> ИНИЦИАЛИЗАЦИЯ_ПИКСЕЛЬ_МАТРИЦЫ<span class="cursor">█</span></h2>
+        <p>Рисуй пиксель-арт в любом разрешении. Слои, прозрачность, перемещение, импорт фото — всё как в Photoshop, только честные пиксели и зелёное свечение ЭЛТ.</p>
+        <div class="hero-features">
+          <span>▣ ЛЮБОЕ РАЗРЕШЕНИЕ</span>
+          <span>▣ СЛОИ + ПРОЗРАЧНОСТЬ</span>
+          <span>▣ ИМПОРТ ФОТО</span>
+          <span>▣ ЭКСПОРТ PNG</span>
+          <span>▣ UNDO / REDO</span>
+        </div>
+        <button class="btn btn-primary btn-large" id="btnHeroNew">▶ СОЗДАТЬ МАТРИЦУ</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="gallery-controls">
+    <div class="search-wrap">
+      <span class="prompt">></span>
+      <input id="searchInput" placeholder="поиск по имени проекта...">
+    </div>
+    <div class="sort-wrap">
+      <button class="btn btn-small active" data-sort="new">СНАЧАЛА НОВЫЕ</button>
+      <button class="btn btn-small" data-sort="old">СТАРЫЕ</button>
+      <button class="btn btn-small" data-sort="name">ПО ИМЕНИ</button>
+    </div>
+  </section>
+
+  <section id="projectsGrid" class="projects-grid"></section>
+  <div id="emptyState" class="empty-state">
+    <div class="empty-icon">[ ░░░ ]</div>
+    <h3>НЕТ ПРОЕКТОВ В ПАМЯТИ</h3>
+    <p>Создай первую матрицу — выбери размер в пикселях и начни жечь фосфор.</p>
+    <button class="btn btn-primary" id="btnEmptyNew">+ СОЗДАТЬ ПРОЕКТ</button>
+  </div>
+</main>
+
+<!-- EDITOR VIEW -->
+<main id="editorView" class="view" style="display:none">
+  <div class="editor-layout">
+    <!-- LEFT TOOLBAR -->
+    <aside class="toolbar">
+      <div class="tool-group">
+        <div class="group-label">ИНСТРУМЕНТ</div>
+        <button class="tool-btn active" data-tool="pencil" title="Карандаш (B)"><span>✎</span><small>КАРАНДАШ</small></button>
+        <button class="tool-btn" data-tool="eraser" title="Ластик (E)"><span>⌫</span><small>ЛАСТИК</small></button>
+        <button class="tool-btn" data-tool="fill" title="Заливка (G)"><span>▦</span><small>ЗАЛИВКА</small></button>
+        <button class="tool-btn" data-tool="picker" title="Пипетка (I)"><span>◉</span><small>ПИПЕТКА</small></button>
+        <button class="tool-btn" data-tool="line" title="Линия (L)"><span>╱</span><small>ЛИНИЯ</small></button>
+        <button class="tool-btn" data-tool="rect" title="Прямоугольник (R)"><span>▭</span><small>ПРЯМОУГ.</small></button>
+        <button class="tool-btn" data-tool="circle" title="Эллипс (C)"><span>○</span><small>ЭЛЛИПС</small></button>
+        <button class="tool-btn" data-tool="move" title="Перемещение слоя (V)"><span>✋</span><small>ДВИГАТЬ</small></button>
+      </div>
+      <div class="tool-group">
+        <div class="group-label">КИСТЬ</div>
+        <div class="brush-sizes">
+          <button class="brush-btn active" data-size="1">1</button>
+          <button class="brush-btn" data-size="2">2</button>
+          <button class="brush-btn" data-size="3">3</button>
+          <button class="brush-btn" data-size="4">4</button>
+        </div>
+        <label class="check"><input type="checkbox" id="perfectPixel"> <span>Идеальный пиксель</span></label>
+      </div>
+      <div class="tool-group">
+        <div class="group-label">ДЕЙСТВИЯ</div>
+        <button class="btn btn-ghost btn-block" id="btnUndo">↩ ОТМЕНИТЬ</button>
+        <button class="btn btn-ghost btn-block" id="btnRedo">↪ ПОВТОРИТЬ</button>
+        <button class="btn btn-ghost btn-block" id="btnClearLayer">⌧ ОЧИСТИТЬ СЛОЙ</button>
+      </div>
+    </aside>
+
+    <!-- CENTER CANVAS -->
+    <section class="canvas-area">
+      <div class="canvas-toolbar">
+        <div class="canvas-info">
+          <span id="canvasSizeLabel">32 × 32</span>
+          <span class="sep">|</span>
+          <span id="coordsLabel">X: -- Y: --</span>
+          <span class="sep">|</span>
+          <span id="zoomLabel">1200%</span>
+        </div>
+        <div class="canvas-actions">
+          <button class="btn btn-small" id="btnZoomOut">−</button>
+          <button class="btn btn-small" id="btnZoomReset">100%</button>
+          <button class="btn btn-small" id="btnZoomIn">+</button>
+          <span class="sep"></span>
+          <label class="check"><input type="checkbox" id="toggleGrid" checked><span>СЕТКА</span></label>
+          <label class="check"><input type="checkbox" id="toggleChecker" checked><span>ШАХМАТЫ</span></label>
+          <label class="check"><input type="checkbox" id="toggleOnion"><span>ЛУК</span></label>
+        </div>
+      </div>
+      <div class="viewport" id="viewport">
+        <div class="canvas-stack" id="canvasStack">
+          <canvas id="checkerCanvas"></canvas>
+          <canvas id="mainCanvas"></canvas>
+          <canvas id="overlayCanvas"></canvas>
+          <div class="grid-overlay" id="gridOverlay"></div>
+        </div>
+      </div>
+      <div class="statusbar">
+        <span id="statusTool">ИНСТРУМЕНТ: КАРАНДАШ</span>
+        <span id="statusLayer">СЛОЙ: 1</span>
+        <span id="statusColor">ЦВЕТ: #00FF41</span>
+      </div>
+    </section>
+
+    <!-- RIGHT SIDEBAR -->
+    <aside class="sidebar">
+      <!-- Colors -->
+      <div class="panel">
+        <div class="panel-header">▣ ПАЛИТРА</div>
+        <div class="color-main">
+          <div class="color-preview">
+            <div class="color-swatch active" id="primaryColorSwatch" title="Основной цвет"></div>
+            <div class="color-swap" id="swapColors" title="Поменять местами (X)">⇅</div>
+            <div class="color-swatch secondary" id="secondaryColorSwatch" title="Второй цвет"></div>
+          </div>
+          <input type="color" id="colorPicker" value="#00ff41">
+          <input type="text" id="colorHex" value="#00FF41" maxlength="7">
+        </div>
+        <div class="palette-grid" id="paletteGrid"></div>
+        <div class="palette-actions">
+          <button class="btn btn-small" id="btnAddToPalette">+ В ПАЛИТРУ</button>
+          <button class="btn btn-small" id="btnPickPalette">ЗАГРУЗИТЬ ПАЛИТРУ</button>
+        </div>
+        <div class="opacity-row">
+          <label>НЕПРОЗРАЧНОСТЬ КИСТИ <span id="brushOpacityVal">100%</span></label>
+          <input type="range" id="brushOpacity" min="0" max="100" value="100">
+        </div>
+      </div>
+
+      <!-- Layers -->
+      <div class="panel layers-panel">
+        <div class="panel-header">▣ СЛОИ <span id="layersCount" class="badge">0</span>
+          <div class="panel-actions">
+            <button class="icon-btn" id="btnAddLayer" title="Новый слой">+</button>
+            <button class="icon-btn" id="btnDupLayer" title="Дублировать">⧉</button>
+            <button class="icon-btn" id="btnMergeDown" title="Объединить вниз">⤓</button>
+            <button class="icon-btn danger" id="btnDeleteLayer" title="Удалить">×</button>
+          </div>
+        </div>
+        <div class="layers-list" id="layersList"></div>
+        <div class="layer-controls">
+          <div class="layer-move-row">
+            <button class="btn btn-small" id="btnMoveUp">▲ ВВЕРХ</button>
+            <button class="btn btn-small" id="btnMoveDown">▼ ВНИЗ</button>
+            <button class="btn btn-small" id="btnLayerUpPx">↑ СДВИГ</button>
+            <button class="btn btn-small" id="btnLayerDownPx">↓</button>
+            <button class="btn btn-small" id="btnLayerLeftPx">←</button>
+            <button class="btn btn-small" id="btnLayerRightPx">→</button>
+          </div>
+          <div class="layer-import">
+            <label class="btn btn-small btn-block" style="cursor:pointer; text-align:center">
+              ⬆ ИМПОРТ ФОТО В СЛОЙ
+              <input type="file" id="importImage" accept="image/*" style="display:none">
+            </label>
+            <div class="import-hint">перетащи картинку на холст</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Export -->
+      <div class="panel">
+        <div class="panel-header">▣ ЭКСПОРТ</div>
+        <div class="export-grid">
+          <label>ФОН ЭКСПОРТА</label>
+          <div class="bg-options">
+            <button class="bg-btn active" data-bg="transparent">ПРОЗРАЧНЫЙ</button>
+            <button class="bg-btn" data-bg="#0a1f0a">ТЁМНЫЙ</button>
+            <button class="bg-btn" data-bg="#001a00">ЧЁРНО-ЗЕЛ.</button>
+            <button class="bg-btn" data-bg="#ffffff">БЕЛЫЙ</button>
+            <input type="color" id="exportBgColor" value="#0a1f0a" title="Свой цвет">
+          </div>
+          <label>МАСШТАБ ЭКСПОРТА</label>
+          <select id="exportScale">
+            <option value="1">1× — как есть</option>
+            <option value="2">2×</option>
+            <option value="4" selected>4×</option>
+            <option value="8">8×</option>
+            <option value="16">16×</option>
+          </select>
+          <button class="btn btn-primary btn-block" id="btnExportPng">⬇ СКАЧАТЬ PNG</button>
+          <button class="btn btn-ghost btn-block" id="btnExportPngBg">⬇ СКАЧАТЬ С ФОНОМ</button>
+          <div class="split-2">
+            <button class="btn btn-small btn-block" id="btnCopyPng">КОПИРОВАТЬ</button>
+            <button class="btn btn-small btn-block" id="btnSaveProject">💾 СОХРАНИТЬ</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Canvas settings -->
+      <div class="panel">
+        <div class="panel-header">▣ ХОЛСТ</div>
+        <div class="canvas-settings">
+          <div class="row">
+            <label>ШИРИНА</label><input type="number" id="canvasW" min="1" max="512" value="32">
+            <label>ВЫСОТА</label><input type="number" id="canvasH" min="1" max="512" value="32">
+          </div>
+          <button class="btn btn-small btn-block" id="btnResizeCanvas">ПРИМЕНИТЬ РАЗМЕР</button>
+          <label class="check"><input type="checkbox" id="mirrorX"> <span>ЗЕРКАЛО X</span></label>
+          <label class="check"><input type="checkbox" id="mirrorY"> <span>ЗЕРКАЛО Y</span></label>
+        </div>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<!-- NEW PROJECT MODAL -->
+<div id="newProjectModal" class="modal" style="display:none">
+  <div class="modal-backdrop"></div>
+  <div class="modal-window">
+    <div class="modal-header">
+      <h3>◰ НОВАЯ МАТРИЦА</h3>
+      <button class="icon-btn" id="closeModal">×</button>
+    </div>
+    <div class="modal-body">
+      <label>НАЗВАНИЕ ПРОЕКТА</label>
+      <input type="text" id="newProjectName" placeholder="например, ZELENO-GRID 07" value="PIXEL_01">
+
+      <label>РАЗМЕР В ПИКСЕЛЯХ</label>
+      <div class="size-presets">
+        <button class="preset-btn" data-w="8" data-h="8">8×8<br><small>иконка</small></button>
+        <button class="preset-btn" data-w="16" data-h="16">16×16<br><small>спрайт</small></button>
+        <button class="preset-btn active" data-w="32" data-h="32">32×32<br><small>классика</small></button>
+        <button class="preset-btn" data-w="64" data-h="64">64×64<br><small>арт</small></button>
+        <button class="preset-btn" data-w="128" data-h="128">128×128<br><small>постер</small></button>
+        <button class="preset-btn" data-w="64" data-h="32">64×32<br><small>широкий</small></button>
+      </div>
+      <div class="custom-size">
+        <div class="size-inputs">
+          <div><label>ШИРИНА</label><input type="number" id="newW" min="1" max="512" value="32"></div>
+          <span class="x">×</span>
+          <div><label>ВЫСОТА</label><input type="number" id="newH" min="1" max="512" value="32"></div>
+        </div>
+        <div class="size-hint"><span id="pixelCount">1024</span> пикселей • <span id="sizeHint">оптимально для спрайтов</span></div>
+      </div>
+
+      <label>ФОН ХОЛСТА</label>
+      <div class="bg-options">
+        <button class="bg-btn active" data-bgmodal="transparent">ПРОЗРАЧНЫЙ</button>
+        <button class="bg-btn" data-bgmodal="#0a1f0a">ТЁМНЫЙ</button>
+        <button class="bg-btn" data-bgmodal="#001100">ЧЁРНЫЙ</button>
+        <input type="color" id="newBgColor" value="#0a1f0a">
+      </div>
+
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="cancelModal">ОТМЕНА</button>
+        <button class="btn btn-primary" id="createProjectBtn">▶ СОЗДАТЬ — ENTER</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- IMPORT MODAL -->
+<div id="importModal" class="modal" style="display:none">
+  <div class="modal-backdrop"></div>
+  <div class="modal-window small">
+    <div class="modal-header"><h3>⬆ ИМПОРТ ИЗОБРАЖЕНИЯ</h3><button class="icon-btn" id="closeImportModal">×</button></div>
+    <div class="modal-body">
+      <div id="importPreviewWrap" style="background:#000; padding:8px; border:1px solid #00ff41; margin-bottom:10px; text-align:center">
+        <img id="importPreview" style="max-width:100%; image-rendering:pixelated">
+      </div>
+      <label>РЕЖИМ</label>
+      <select id="importMode">
+        <option value="stretch">Растянуть на весь холст</option>
+        <option value="fit">Вписать с сохранением пропорций</option>
+        <option value="center">По центру без масштаба</option>
+        <option value="pixelize">Пикселизовать (уменьшить цвета)</option>
+      </select>
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="importAsNewLayer" checked> <span>Как новый слой</span></label>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" id="cancelImport">ОТМЕНА</button>
+        <button class="btn btn-primary" id="confirmImport">ИМПОРТИРОВАТЬ</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
